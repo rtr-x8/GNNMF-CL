@@ -288,15 +288,12 @@ class RecommendationModel(nn.Module):
 
         # Contrastive caption and nutrient
         if not is_abration_wo_cl:
-            self.intention_cl = nn.ModuleList([
-                NutrientCaptionContrastiveLearning(
-                    nutrient_input_dim=nutrient_dim,
-                    caption_input_dim=input_vlm_caption_dim,
-                    output_dim=hidden_dim,
-                    temperature=temperature
-                )
-                for _ in range(intention_layers)
-            ])
+            self.intention_cl = NutrientCaptionContrastiveLearning(
+                nutrient_input_dim=nutrient_dim,
+                caption_input_dim=input_vlm_caption_dim,
+                output_dim=hidden_dim,
+                temperature=temperature
+            )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),
                 DictActivate(device, ["intention"]),
@@ -402,15 +399,11 @@ class RecommendationModel(nn.Module):
         # data.set_value_dict("x", self.layer_norm.initial_forward(data.x_dict))
 
         if not self.is_abration_wo_cl:
-            cl_losses = []
-            for cl in self.intention_cl:
-                intention_x, _, cl_loss = cl(data)
-                data.set_value_dict("x", {
-                    "intention": intention_x
-                })
-                cl_losses.append(cl_loss)
-                data.set_value_dict("x", self.intention_cl_after(data.x_dict))
-            cl_loss = torch.stack(cl_losses).mean()
+            intention_x, _, cl_loss = self.intention_cl(data)
+            data.set_value_dict("x", {
+                "intention": intention_x
+            })
+            data.set_value_dict("x", self.intention_cl_after(data.x_dict))
 
         for gnn in self.sensing_gnn:
             data.set_value_dict("x", gnn(data.x_dict, data.edge_index_dict))
