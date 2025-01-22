@@ -70,6 +70,7 @@ class TasteGNN(nn.Module):
                 out[k] = v
             else:
                 out[k] = out[k] * (1-self.r_alpha) + v * self.r_alpha
+
         return out
 
 
