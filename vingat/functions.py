@@ -174,7 +174,7 @@ def train_one_epoch(
             main_loss_rate -= sum([entry["weight"] for entry in loss_entories])
 
         if main_loss_rate < 0:
-            raise ValueError("main loss rate is negative")
+            raise ValueError(f"main loss rate is negative, : {main_loss_rate}")
 
         # エッジのラベルとエッジインデックスを取得
         edge_label_index = batch_data['user', 'buys', 'item'].edge_label_index
@@ -210,10 +210,8 @@ def train_one_epoch(
 
         loss = main_loss_rate * main_loss
         if len(loss_entories) > 0:
-            other_loss = torch.sum(torch.stack(
-                [entry["loss"] * entry["weight"] for entry in loss_entories]
-            ))
-            loss += other_loss
+            for entry in loss_entories:
+                loss += entry["loss"] * entry["weight"]
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
