@@ -1,1 +1,2 @@
-# VINGAT-Food
+# GNNMF-CL
+

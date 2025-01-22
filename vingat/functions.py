@@ -187,12 +187,6 @@ def train_one_epoch(
         pos_mask = batch_data['user', 'buys', 'item'].edge_label == 1
         neg_mask = batch_data['user', 'buys', 'item'].edge_label == 0
 
-        if len(neg_mask) == 0:
-            raise ValueError("Negative mask is empty")
-
-        if len(pos_mask) != len(neg_mask):
-            raise ValueError("Positive mask and Negative mask are not same length")
-
         # エッジインデックスからノードの埋め込みを取得
         user_embed = user_embeddings[edge_label_index[0]]
         recipe_embed = recipe_embeddings[edge_label_index[1]]
@@ -206,6 +200,10 @@ def train_one_epoch(
         neg_user_embed = user_embed[neg_mask]
         neg_recipe_embed = recipe_embed[neg_mask]
         neg_scores = model.predict(neg_user_embed, neg_recipe_embed).squeeze()
+
+        if len(pos_scores) != len(neg_scores):
+            print(f"pos: {len(pos_scores)}, neg: {len(neg_scores)}")
+            raise ValueError("Positive scores and Negative scores are not same length")
 
         # 損失の計算
         main_loss = criterion(pos_scores, neg_scores, model.parameters())
