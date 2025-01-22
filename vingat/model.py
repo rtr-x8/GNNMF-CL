@@ -126,27 +126,22 @@ class DictLayerNorm(nn.Module):
 
 
 class MultiModalFusionGAT(nn.Module):
-    NODES = ['user', 'item', 'taste', 'intention', 'image']
-    EDGES = [('taste', 'associated_with', 'item'),
-             ('intention', 'associated_with', 'item'),
-             ('image', 'associated_with', 'item'),
-             ('item', 'bought_by', 'user'),
-             ('user', 'buys', 'item'),]
-
-    def __init__(self, hidden_dim, num_heads, resisual_alpha):
+    def __init__(self, hidden_dim, num_heads, resisual_alpha, nodes, edges):
         super().__init__()
         self.r_alpha = resisual_alpha
+        self.nodes = nodes
+        self.edges = edges
         self.gnn = HGTConv(
             in_channels=hidden_dim,
             out_channels=hidden_dim,
-            metadata=(self.NODES, self.EDGES),
+            metadata=(self.nodes, self.edges),
             heads=num_heads,
         )
 
     def forward(self, x_dict, edge_index_dict):
         out = self.gnn(
-            {k: v for k, v in x_dict.items() if k in self.NODES},
-            {k: v for k, v in edge_index_dict.items() if k in self.EDGES}
+            {k: v for k, v in x_dict.items() if k in self.nodes},
+            {k: v for k, v in edge_index_dict.items() if k in self.edges}
         )  # Only User, Item node
 
         for k, v in x_dict.items():
@@ -260,11 +255,17 @@ class RecommendationModel(nn.Module):
         link_predictor_leaky_relu_slope: float,
         sensing_gnn_resisual_alpha: float,
         fusion_gnn_resisual_alpha: float,
+        is_abration_wo_cl: bool,
+        is_abration_wo_taste: bool,
     ):
         super().__init__()
         os.environ['TORCH_USE_CUDA_DSA'] = '1'
 
         self.cl_loss_rate = cl_loss_rate
+        if is_abration_wo_cl:
+            self.cl_loss_rate = 0.0
+        self.is_abration_wo_cl = is_abration_wo_cl
+        self.is_abration_wo_taste = is_abration_wo_taste
 
         # Node Encoder
         self.user_encoder = nn.Sequential(
@@ -280,24 +281,26 @@ class RecommendationModel(nn.Module):
             nn.Dropout(p=item_encoder_dropout_rate)
         )
         self.image_encoder = LowRankLinear(input_image_dim, hidden_dim, rank=32)
-        self.taste_encoder = nn.Linear(input_cooking_direction_dim, hidden_dim)
+        if not is_abration_wo_taste:
+            self.taste_encoder = nn.Linear(input_cooking_direction_dim, hidden_dim)
         self.ingredient_encoder = nn.Linear(input_ingredient_dim, hidden_dim)
 
         # Contrastive caption and nutrient
-        self.intention_cl = nn.ModuleList([
-            NutrientCaptionContrastiveLearning(
-                nutrient_input_dim=nutrient_dim,
-                caption_input_dim=input_vlm_caption_dim,
-                output_dim=hidden_dim,
-                temperature=temperature
+        if not is_abration_wo_cl:
+            self.intention_cl = nn.ModuleList([
+                NutrientCaptionContrastiveLearning(
+                    nutrient_input_dim=nutrient_dim,
+                    caption_input_dim=input_vlm_caption_dim,
+                    output_dim=hidden_dim,
+                    temperature=temperature
+                )
+                for _ in range(intention_layers)
+            ])
+            self.intention_cl_after = nn.Sequential(
+                # DictBatchNorm(hidden_dim, device, ["intention"]),
+                DictActivate(device, ["intention"]),
+                DictDropout(intention_cl_after_dropout_rate, device, ["intention"])
             )
-            for _ in range(intention_layers)
-        ])
-        self.intention_cl_after = nn.Sequential(
-            # DictBatchNorm(hidden_dim, device, ["intention"]),
-            DictActivate(device, ["intention"]),
-            DictDropout(intention_cl_after_dropout_rate, device, ["intention"])
-        )
 
         # Taste Level GAT
         self.sensing_gnn = nn.ModuleList([
@@ -313,11 +316,21 @@ class RecommendationModel(nn.Module):
         )
 
         # Fusion GAT
+        fusion_nodes = ['user', 'item', 'taste', 'image']
+        fusion_edges = [('taste', 'associated_with', 'item'),
+                        ('image', 'associated_with', 'item'),
+                        ('user', 'buys', 'item'),
+                        ('item', 'bought_by', 'user')]
+        if not is_abration_wo_cl:
+            fusion_nodes.append("intention")
+            fusion_edges.insert(1, ('intention', 'associated_with', 'item'))
         self.fusion_gnn = nn.ModuleList([
             MultiModalFusionGAT(
                 hidden_dim=hidden_dim,
                 num_heads=num_heads,
-                resisual_alpha=fusion_gnn_resisual_alpha
+                resisual_alpha=fusion_gnn_resisual_alpha,
+                nodes=fusion_nodes,
+                edges=fusion_edges
             )
             for _ in range(fusion_layers)
         ])
@@ -335,8 +348,12 @@ class RecommendationModel(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
+        # Layer Normalization
+        ln_node_types = ["user", "item", "image", "ingredient", "taste"]
+        if not is_abration_wo_cl:
+            ln_node_types.append("intention")
         self.layer_norm = DictLayerNormForLayer(
-            node_types=["user", "item", "image", "ingredient", "taste", "intention"],
+            node_types=ln_node_types,
             hidden_dim=hidden_dim
         )
 
@@ -375,20 +392,24 @@ class RecommendationModel(nn.Module):
             "item": self.item_encoder(data["item"].id),
             "image": self.image_encoder(data["image"].org),
             "ingredient": self.ingredient_encoder(data["ingredient"].org),
-            "taste": self.taste_encoder(data["taste"].org),
         })
+        if not self.is_abration_wo_taste:
+            data.set_value_dict("x", {
+                "taste": self.taste_encoder(data["taste"].org)
+            })
 
         # data.set_value_dict("x", self.layer_norm.initial_forward(data.x_dict))
 
-        cl_losses = []
-        for cl in self.intention_cl:
-            intention_x, _, cl_loss = cl(data)
-            data.set_value_dict("x", {
-                "intention": intention_x
-            })
-            cl_losses.append(cl_loss)
-            data.set_value_dict("x", self.intention_cl_after(data.x_dict))
-        cl_loss = torch.stack(cl_losses).mean()
+        if not self.is_abration_wo_cl:
+            cl_losses = []
+            for cl in self.intention_cl:
+                intention_x, _, cl_loss = cl(data)
+                data.set_value_dict("x", {
+                    "intention": intention_x
+                })
+                cl_losses.append(cl_loss)
+                data.set_value_dict("x", self.intention_cl_after(data.x_dict))
+            cl_loss = torch.stack(cl_losses).mean()
 
         for gnn in self.sensing_gnn:
             data.set_value_dict("x", gnn(data.x_dict, data.edge_index_dict))
@@ -400,6 +421,8 @@ class RecommendationModel(nn.Module):
 
         data.set_value_dict("x", self.layer_norm.main_forward(data.x_dict))
 
-        return data, [
-            {"name": "cl_loss", "loss": cl_loss, "weight": self.cl_loss_rate}
-        ]
+        losses = []
+        if not self.is_abration_wo_cl:
+            losses.append({"name": "cl_loss", "loss": cl_loss, "weight": self.cl_loss_rate})
+
+        return data, losses
