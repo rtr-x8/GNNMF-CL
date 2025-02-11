@@ -212,6 +212,7 @@ def train_one_epoch(
         if len(loss_entories) > 0:
             for entry in loss_entories:
                 loss += entry["loss"] * entry["weight"]
+        loss -= 1   # 合計1になるよう計算しているのでその分消す
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
