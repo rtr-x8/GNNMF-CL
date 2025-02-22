@@ -210,9 +210,11 @@ def train_one_epoch(
 
         #
         loss = main_loss  # * main_loss_rate
-        if len(loss_entories) > 0:
-            for entry in loss_entories:
-                loss += entry["loss"]  # * entry["weight"]
+        if len(loss_entories) == 1:
+            loss = main_loss + loss_entories[0]["loss"]
+
+        if len(loss_entories) > 1:
+            raise ValueError(f'loss entry has {len(loss_entories)} losses')
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
