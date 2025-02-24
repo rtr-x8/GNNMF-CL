@@ -54,9 +54,6 @@ def evaluate_model(
             if num_pos_samples == 0:
                 continue
 
-            """
-            TODO; PyGのNgativeSampling使えるのでは？
-            """
             num_neg_samples = 500
             user_neg_indices, negative_edge_index = negative_sampling_with_popularity(
                 user_id=user_id,
