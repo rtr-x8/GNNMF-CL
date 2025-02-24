@@ -33,8 +33,11 @@ class ContrastiveLoss(nn.Module):
         z = torch.cat([z_A, z_B], dim=0)  # (2N, d)
         z = F.normalize(z, dim=-1)  # 正規化（余分な計算削減）
         similarity_matrix = torch.matmul(z, z.T) / self.temperature  # (2N, 2N)
-        labels = torch.cat([torch.arange(N, 2 * N), torch.arange(0, N)]).to(device)
-        mask = torch.eye(2 * N, dtype=torch.bool).to(device)  # 自己相関を除く
+        labels = torch.cat([
+            torch.arange(N, 2 * N, device=device),
+            torch.arange(0, N, device=device)
+        ])
+        mask = torch.eye(2 * N, dtype=torch.bool, device=device)  # 自己相関を除く
         similarity_matrix = similarity_matrix[~mask].view(2 * N, -1)  # 自分自身を除外
         loss = F.cross_entropy(similarity_matrix, labels)
         return loss
