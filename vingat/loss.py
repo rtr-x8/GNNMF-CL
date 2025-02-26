@@ -40,6 +40,6 @@ class ContrastiveLoss(nn.Module):
             torch.arange(0, N, device=device)
         ]) % (2 * N - 1)
         mask = torch.eye(2 * N, dtype=torch.bool, device=device)  # 自己相関を除く
-        similarity_matrix = similarity_matrix.masked_select(~mask).view(2 * N, -1)  # 自分自身を除外
+        similarity_matrix = similarity_matrix.masked_fill(mask, float('-inf'))  # 自分自身を無効化
         loss = F.cross_entropy(similarity_matrix, labels)
         return loss
