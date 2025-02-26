@@ -32,14 +32,21 @@ class ContrastiveLoss(nn.Module):
         N = z_A.size(0)
         z = torch.cat([z_A, z_B], dim=0).half()  # (2N, d) and convert to float16
         z = F.normalize(z, dim=-1)  # 正規化（余分な計算削減）
-        z = z.view(1, 2 * N, -1)  # 3次元テンソルに変換
-        similarity_matrix = torch.bmm(z, z.transpose(1, 2)) / self.temperature  # (1, 2N, 2N)
-        similarity_matrix = similarity_matrix.squeeze(0)  # 2次元に戻す
-        labels = torch.cat([
-            torch.arange(N, 2 * N, device=device),
-            torch.arange(0, N, device=device)
-        ]) % (2 * N - 1)
-        mask = torch.eye(2 * N, dtype=torch.bool, device=device)  # 自己相関を除く
-        similarity_matrix = similarity_matrix.masked_fill(mask, float('-inf'))  # 自分自身を無効化
-        loss = F.cross_entropy(similarity_matrix, labels)
-        return loss
+
+        # バッチ処理の導入
+        batch_size = 1024  # バッチサイズを設定
+        losses = []
+        for start in range(0, 2 * N, batch_size):
+            end = min(start + batch_size, 2 * N)
+            z_batch = z[start:end]
+            similarity_matrix = torch.mm(z_batch, z.transpose(0, 1)) / self.temperature
+            labels = torch.cat([
+                torch.arange(N, 2 * N, device=device),
+                torch.arange(0, N, device=device)
+            ]) % (2 * N - 1)
+            mask = torch.eye(end - start, dtype=torch.bool, device=device)  # 自己相関を除く
+            similarity_matrix = similarity_matrix.masked_fill(mask, float('-inf'))  # 自分自身を無効化
+            loss = F.cross_entropy(similarity_matrix, labels[start:end])
+            losses.append(loss)
+
+        return torch.mean(torch.stack(losses))
