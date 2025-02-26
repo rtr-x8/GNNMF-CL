@@ -39,14 +39,21 @@ class ContrastiveLoss(nn.Module):
         for start in range(0, 2 * N, batch_size):
             end = min(start + batch_size, 2 * N)
             z_batch = z[start:end]
-            similarity_matrix = torch.mm(z_batch, z.transpose(0, 1)) / self.temperature
-            labels = torch.cat([
-                torch.arange(start, end, device=device),
-                torch.arange(start, end, device=device)
-            ], dim=0)  # ラベルの次元を調整
-            mask = torch.eye(z_batch.size(0), dtype=torch.bool, device=device)  # 自己相関を除く
-            similarity_matrix = similarity_matrix.masked_fill(mask, float('-inf'))  # 自分自身を無効化
+            # z_batchのサイズ: (batch_size, dim)
+            # zのサイズ: (2 * N, dim)
+            similarity_matrix = torch.mm(z_batch, z.T) / self.temperature  # (batch_size, 2 * N)
+
+            # マスクの作成
+            mask = torch.zeros((z_batch.size(0), z.size(0)), dtype=torch.bool, device=device)
+            mask[torch.arange(z_batch.size(0)), start + torch.arange(z_batch.size(0))] = True
+
+            # 自分自身を無効化
+            similarity_matrix = similarity_matrix.masked_fill(mask, float('-inf'))
+
+            # ラベルの設定：正例のインデックスを設定
+            labels = (start + torch.arange(z_batch.size(0), device=device) + N) % (2 * N)
+
             loss = F.cross_entropy(similarity_matrix, labels)
             losses.append(loss)
 
-        return torch.sum(torch.stack(losses))  # 平均ではなく合計を使用
+        return torch.mean(torch.stack(losses))  # 損失の平均を返す
