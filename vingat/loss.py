@@ -30,7 +30,7 @@ class ContrastiveLoss(nn.Module):
     def forward(self, z_A, z_B):
         device = z_A.device
         N = z_A.size(0)
-        z = torch.cat([z_A, z_B], dim=0)  # (2N, d)
+        z = torch.cat([z_A, z_B], dim=0).half()  # (2N, d) and convert to float16
         z = F.normalize(z, dim=-1)  # 正規化（余分な計算削減）
         similarity_matrix = torch.matmul(z, z.T) / self.temperature  # (2N, 2N)
         labels = torch.cat([
