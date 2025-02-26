@@ -36,7 +36,6 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         nutrient_emb = self.nutrient_encoder(data["intention"].nutrient)
         caption_emb = self.caption_encoder(data["intention"].caption)
         loss = self.loss(nutrient_emb, caption_emb)
-        loss = self.loss(nutrient_emb, caption_emb)
         return (
             F.normalize(caption_emb, p=2, dim=1),
             F.normalize(nutrient_emb, p=2, dim=1),

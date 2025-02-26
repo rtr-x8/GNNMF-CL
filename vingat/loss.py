@@ -36,7 +36,7 @@ class ContrastiveLoss(nn.Module):
         labels = torch.cat([
             torch.arange(N, 2 * N, device=device),
             torch.arange(0, N, device=device)
-        ])
+        ]) % (2 * N - 1)
         mask = torch.eye(2 * N, dtype=torch.bool, device=device)  # 自己相関を除く
         similarity_matrix = similarity_matrix[~mask].view(2 * N, -1)  # 自分自身を除外
         loss = F.cross_entropy(similarity_matrix, labels)
