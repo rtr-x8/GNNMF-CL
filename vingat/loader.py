@@ -266,9 +266,21 @@ def load_ingredients_with_embeddings(
     return ingredients_with_embeddings
 
 
+def load_recipe_image_embeddings_ft(
+    directory_path: str,
+    originarl_df: pd.DataFrame,
+    device
+) -> pd.DataFrame:
+    file_path = f"{directory_path}/recipe_image_embeddings_ft.csv"
+    recipe_image_embeddings = pd.read_csv(file_path, index_col=0)
+    print("recipe_image_embeddings_ft is loaded")
+    return recipe_image_embeddings
+
+
 def load_recipe_image_embeddings(
     directory_path: str,
-    originarl_df: pd.DataFrame, device
+    originarl_df: pd.DataFrame,
+    device
 ) -> pd.DataFrame:
     """
     レシピ画像の特徴データ
