@@ -244,6 +244,7 @@ class RecommendationModel(nn.Module):
         input_cooking_direction_dim: int,
         user_encoder_low_rank_dim: int,
         item_encoder_low_rank_dim: int,
+        image_encoder_low_rank_dim: int,
         user_encoder_dropout_rate: float,
         item_encoder_dropout_rate: float,
         intention_cl_after_dropout_rate: float,
@@ -280,7 +281,9 @@ class RecommendationModel(nn.Module):
             # nn.ReLU(),
             nn.Dropout(p=item_encoder_dropout_rate)
         )
-        self.image_encoder = LowRankLinear(input_image_dim, hidden_dim, rank=32)
+        self.image_encoder = LowRankLinear(input_image_dim,
+                                           hidden_dim,
+                                           rank=image_encoder_low_rank_dim)
         if not is_abration_wo_taste:
             self.taste_encoder = nn.Linear(input_cooking_direction_dim, hidden_dim)
         self.ingredient_encoder = nn.Linear(input_ingredient_dim, hidden_dim)
