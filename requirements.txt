@@ -440,6 +440,7 @@ scooby==0.10.0
 scs==3.2.7.post2
 seaborn==0.13.2
 SecretStorage==3.3.1
+setuptools
 Send2Trash==1.8.3
 sentence-transformers==3.4.1
 sentencepiece==0.2.0
