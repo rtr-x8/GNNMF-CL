@@ -112,8 +112,8 @@ def load_recipe_image_vlm_caption_embeddings(
     return df
 
 
-def preprocess_rating_data(data: pd.DataFrame, rating_threshold: float = 3.5):
-    data["interaction"] = data["rating"].apply(lambda x: 1 if x > rating_threshold else 0)
+def preprocess_rating_data(data: pd.DataFrame):
+    # data["interaction"] = data["rating"].apply(lambda x: 1 if x > rating_threshold else 0)
     return data
 
 
@@ -124,11 +124,12 @@ def core_file_loader(
     train = pd.read_csv(f"{directory_path}/core-data-train_rating.csv")
     test = pd.read_csv(f"{directory_path}/core-data-test_rating.csv")
     val = pd.read_csv(f"{directory_path}/core-data-valid_rating.csv")
+    print("一旦使わないけど：", rating_threshold)
     return (
         pd.read_csv(f"{directory_path}/core-data_recipe.csv", index_col=0),
-        preprocess_rating_data(train, rating_threshold),
-        preprocess_rating_data(test, rating_threshold),
-        preprocess_rating_data(val, rating_threshold)
+        preprocess_rating_data(train),
+        preprocess_rating_data(test),
+        preprocess_rating_data(val)
     )
 
 
