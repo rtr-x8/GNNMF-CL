@@ -8,8 +8,11 @@ import torch.nn as nn
 import numpy as np
 import torch
 from tqdm.notebook import tqdm
-from typing import Dict
+from typing import Dict, Tuple
 from sentence_transformers import SentenceTransformer
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import joblib
 
 
 use_nutritions = ["niacin", "fiber", "sugars", "sodium", "carbohydrates",
@@ -488,3 +491,25 @@ def load_alternative_ingredients(directory_path: str, originarl_df: pd.DataFrame
     result = pd.DataFrame(alternative_ingredients)
     result.to_csv(file_path)
     return result
+
+
+def train_dataclustering(train_data: pd.DataFrame, n_cluster: int, path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    df = train_data.copy()
+    scaler = StandardScaler()
+    df_scaled = scaler.fit_transform(df)
+
+    # 6クラスタでKMeansクラスタリング
+    kmeans = KMeans(n_clusters=6, n_init=n_cluster)
+    df['cluster'] = kmeans.fit_predict(df_scaled)
+    joblib.dump(kmeans, f'{path}/recipe_kmeanth_model.joblib')
+
+    return df
+
+
+def calculate_cluster(data: pd.DataFrame, path: str) -> pd.DataFrame:
+    loaded_kmeans_model = joblib.load(f'{path}/recipe_kmeanth_model.joblib')
+
+    # テストデータなど (N=200, 次元=12) でクラスタIDを予測
+    test_cluster_ids = loaded_kmeans_model.predict(data)
+    data["cluster"] = test_cluster_ids
+    return data
