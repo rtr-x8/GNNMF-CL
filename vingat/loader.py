@@ -471,8 +471,8 @@ def load_alternative_ingredients(directory_path: str, originarl_df: pd.DataFrame
 
     alternative_ingredients = []
 
-    for i in tqdm(ingredients.index):
-        for sim_ing in selected_indices[i]:
+    for idx, i in tqdm(enumerate(ingredients.index)):
+        for sim_ing in selected_indices[idx]:
             _i = sim_ing.item()
             if _i == -1:
                 continue
