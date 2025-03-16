@@ -49,10 +49,10 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         nutrient_input_dim: int,
         caption_input_dim: int,
         output_dim: int,
-        temperature: float = 0.5,
-        cluster_centers: torch.Tensor = None,
-        cluster_margin: float = 0.5,
-        cluster_weight: float = 1.0,
+        temperature: float,
+        cluster_centers: torch.Tensor,
+        cluster_margin: float,
+        cluster_weight: float,
     ):
         """
         Args:
@@ -102,21 +102,15 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             nutrient_emb_norm: 正規化された栄養素埋め込み
             total_loss: (対照学習ロス + クラスタロス) の合計
         """
-        print(0)
         # 1) 既存の対照学習ロス計算
         nutrient_emb = self.nutrient_encoder(data["intention"].nutrient)  # (B, output_dim)
         caption_emb = self.caption_encoder(data["intention"].caption)     # (B, output_dim)
-        print(1)
 
-        print(nutrient_emb.device, caption_emb.device)
-        print(nutrient_emb.shape, caption_emb.shape)
         contrastive_loss = self.loss_contrastive(nutrient_emb, caption_emb)
-        print(2)
 
         # 2) クラスタロス計算
         cluster_loss = 0.0
         cluster_ids = data["intention"].cluster  # shape: (B,)
-        print(3)
 
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
@@ -124,36 +118,29 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         intra_loss = F.mse_loss(data["intention"].nutrient,
                                 cluster_centers_for_samples,
                                 reduction='mean')
-        print(4)
 
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
         #  Pairwise距離を計算: shape (num_clusters, num_clusters)
         cent = self.cluster_centers  # shape (num_clusters, output_dim)
         dist_matrix = (cent.unsqueeze(0) - cent.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
-        print(5)
 
         # 対角成分(=0)を除いたクラスタ間の距離
         num_clusters = cent.size(0)
         mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, num_clusters)
         dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
-        print(6)
 
         # マージン・ヒンジ損失
         inter_loss = F.relu(self.cluster_margin - dist_except_diag).mean()
-        print(7)
 
         cluster_loss = intra_loss + inter_loss
-        print(8)
 
         # 3) 合計損失 = 対照学習ロス + クラスタロス(重み付き)
         total_loss = contrastive_loss + self.cluster_weight * cluster_loss
-        print(9)
 
         # 4) 正規化した埋め込みを返す
         caption_emb_norm = F.normalize(caption_emb, p=2, dim=1)
         nutrient_emb_norm = F.normalize(nutrient_emb, p=2, dim=1)
-        print(10)
 
         return caption_emb_norm, nutrient_emb_norm, total_loss
 
@@ -410,7 +397,10 @@ class RecommendationModel(nn.Module):
                 nutrient_input_dim=nutrient_dim,
                 caption_input_dim=input_vlm_caption_dim,
                 output_dim=hidden_dim,
-                temperature=temperature
+                temperature=temperature,
+                cluster_centers=cluster_centers,
+                cluster_margin=0.5,
+                cluster_weight=1.0
             )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),

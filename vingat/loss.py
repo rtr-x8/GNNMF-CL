@@ -53,8 +53,6 @@ class ContrastiveLoss(nn.Module):
             # ラベルの設定：正例のインデックスを設定
             labels = (start + torch.arange(z_batch.size(0), device=device) + N) % (2 * N)
 
-            print(similarity_matrix.device, labels.device)
-            print(similarity_matrix.shape, labels.shape)
             loss = F.cross_entropy(similarity_matrix, labels)
             losses.append(loss)
 
