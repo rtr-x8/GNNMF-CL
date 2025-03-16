@@ -6,3 +6,4 @@ notebook/*
 !notebook/book.ipynb
 !notebook/.env.sample
 *.pth
+*.joblib
