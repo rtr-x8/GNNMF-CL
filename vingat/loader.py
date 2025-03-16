@@ -499,17 +499,22 @@ def train_dataclustering(train_data: pd.DataFrame, n_cluster: int, path: str) ->
     df_scaled = scaler.fit_transform(df)
 
     # 6クラスタでKMeansクラスタリング
-    kmeans = KMeans(n_clusters=6, n_init=n_cluster)
-    df['cluster'] = kmeans.fit_predict(df_scaled)
-    joblib.dump(kmeans, f'{path}/recipe_kmeanth_model.joblib')
+    kmeans_model = KMeans(n_clusters=6, n_init=n_cluster)
+    df['cluster'] = kmeans_model.fit_predict(df_scaled)
+    joblib.dump(kmeans_model, f'{path}/recipe_kmeanth_model_n_{n_cluster}.joblib')
 
-    return df
+    return df, kmeans_model, scaler
 
 
-def calculate_cluster(data: pd.DataFrame, path: str) -> pd.DataFrame:
-    loaded_kmeans_model = joblib.load(f'{path}/recipe_kmeanth_model.joblib')
+def calculate_cluster(data: pd.DataFrame, path: str, scaler, kmeans_model) -> pd.DataFrame:
+    # loaded_kmeans_model = joblib.load(f'{path}/recipe_kmeanth_model.joblib')
+    df_scaled = scaler.transform(data)
 
     # テストデータなど (N=200, 次元=12) でクラスタIDを予測
-    test_cluster_ids = loaded_kmeans_model.predict(data)
+    test_cluster_ids = kmeans_model.predict(df_scaled)
     data["cluster"] = test_cluster_ids
     return data
+
+
+def load_clouster_centers(kmeanth_model, device):
+    return torch.tensor(kmeanth_model.cluster_centers_, dtype=torch.float32, device=device)
