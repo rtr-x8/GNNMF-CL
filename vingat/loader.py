@@ -497,7 +497,7 @@ def train_dataclustering(
     train_data: pd.DataFrame,
     n_cluster: int,
     path: str
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, KMeans, StandardScaler]:
     df = train_data.copy()
     scaler = StandardScaler()
     df_scaled = scaler.fit_transform(df)
