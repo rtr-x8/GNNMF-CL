@@ -361,6 +361,8 @@ class RecommendationModel(nn.Module):
         is_abration_wo_cl: bool,
         is_abration_wo_taste: bool,
         cluster_centers: torch.Tensor,
+        cluster_margin=0.8,
+        cluster_loss_weight=2.0,
     ):
         super().__init__()
         os.environ['TORCH_USE_CUDA_DSA'] = '1'
@@ -399,8 +401,8 @@ class RecommendationModel(nn.Module):
                 output_dim=hidden_dim,
                 temperature=temperature,
                 cluster_centers=cluster_centers,
-                cluster_margin=0.5,
-                cluster_weight=1.0
+                cluster_margin=cluster_margin,
+                cluster_weight=cluster_loss_weight
             )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),
