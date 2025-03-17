@@ -493,7 +493,11 @@ def load_alternative_ingredients(directory_path: str, originarl_df: pd.DataFrame
     return result
 
 
-def train_dataclustering(train_data: pd.DataFrame, n_cluster: int, path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def train_dataclustering(
+    train_data: pd.DataFrame,
+    n_cluster: int,
+    path: str
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = train_data.copy()
     scaler = StandardScaler()
     df_scaled = scaler.fit_transform(df)
