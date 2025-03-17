@@ -115,7 +115,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
         cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
-        intra_loss = F.mse_loss(nutrient_emb,  # TODO; caption_embに変更
+        intra_loss = F.mse_loss(caption_emb,  # TODO; caption_embに変更
                                 self.nutrient_encoder(cluster_centers_for_samples),
                                 reduction='mean')
 
