@@ -115,8 +115,8 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
         cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
-        intra_loss = F.mse_loss(data["intention"].nutrient,
-                                cluster_centers_for_samples,
+        intra_loss = F.mse_loss(caption_emb,  # TODO; caption_embに変更
+                                self.nutrient_encoder(cluster_centers_for_samples),
                                 reduction='mean')
 
         # =============== (B) クラスタ間損失 ================
@@ -361,6 +361,8 @@ class RecommendationModel(nn.Module):
         is_abration_wo_cl: bool,
         is_abration_wo_taste: bool,
         cluster_centers: torch.Tensor,
+        cluster_margin=0.8,
+        cluster_loss_weight=2.0,
     ):
         super().__init__()
         os.environ['TORCH_USE_CUDA_DSA'] = '1'
@@ -399,8 +401,8 @@ class RecommendationModel(nn.Module):
                 output_dim=hidden_dim,
                 temperature=temperature,
                 cluster_centers=cluster_centers,
-                cluster_margin=0.5,
-                cluster_weight=1.0
+                cluster_margin=cluster_margin,
+                cluster_weight=cluster_loss_weight
             )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),
