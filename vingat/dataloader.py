@@ -124,6 +124,10 @@ def create_base_hetero(
     data["intention"].nutrient = torch.tensor(
         _recipe_nutrients.loc[item_lencoder.classes_, use_nutritions].values,
         dtype=torch.float32)
+    data["intention"].cluster = torch.tensor(
+        recipe_nutrients.loc[item_lencoder.classes_, "cluster"].values,
+        dtype=torch.long
+    )
     caption_encoder = StaticEmbeddingLoader(recipe_image_vlm_caption_embeddings,
                                             dimention=input_vlm_caption_dim,
                                             device=device)

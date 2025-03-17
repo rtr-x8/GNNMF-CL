@@ -9,7 +9,7 @@ from vingat.loss import ContrastiveLoss
 
 
 # 新しいCL
-class NutrientCaptionContrastiveLearning(nn.Module):
+class NutrientCaptionContrastiveLearningOld(nn.Module):
     def __init__(
         self,
         nutrient_input_dim,
@@ -41,6 +41,108 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             F.normalize(nutrient_emb, p=2, dim=1),
             loss
         )
+
+
+class NutrientCaptionContrastiveLearning(nn.Module):
+    def __init__(
+        self,
+        nutrient_input_dim: int,
+        caption_input_dim: int,
+        output_dim: int,
+        temperature: float,
+        cluster_centers: torch.Tensor,
+        cluster_margin: float,
+        cluster_weight: float,
+    ):
+        """
+        Args:
+            nutrient_input_dim: 栄養素ベクトルの次元
+            caption_input_dim: キャプションベクトルの次元
+            output_dim: 対照学習で出力する埋め込み次元
+            temperature: 既存の対照学習Lossにおける温度パラメータ
+            cluster_centers: shape = [num_clusters, nutrient_input_dim]
++                事前に算出したクラスタ中心（生の栄養素次元で計算）
+            cluster_margin: クラスタ間の分離を制御するマージン
+            cluster_weight: クラスタロス全体に掛ける重み
+        """
+        super().__init__()
+        self.temperature = temperature
+        self.cluster_margin = cluster_margin
+        self.cluster_weight = cluster_weight
+
+        # 栄養素埋め込み
+        self.nutrient_encoder = nn.Sequential(
+            nn.Linear(nutrient_input_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, output_dim)
+        )
+        # キャプション埋め込み
+        self.caption_encoder = nn.Sequential(
+            nn.Linear(caption_input_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, output_dim)
+        )
+
+        # 対照学習用の損失 (CosineSimilarity + temperature)
+        self.loss_contrastive = ContrastiveLoss(temperature=temperature)
+
+        # クラスタ中心を保持（必要に応じて勾配を更新しないなら buffer 登録）
+        self.register_buffer("cluster_centers", cluster_centers)
+
+    def forward(self, data):
+        """
+        Args:
+            data:
+              data["intention"].nutrient -> (batch_size, nutrient_input_dim)
+              data["intention"].caption  -> (batch_size, caption_input_dim)
+              data["intention"].cluster  -> (batch_size,)  各サンプルが属するクラスタID (0 ~ num_clusters-1)
+
+        Returns:
+            caption_emb_norm: 正規化されたキャプション埋め込み
+            nutrient_emb_norm: 正規化された栄養素埋め込み
+            total_loss: (対照学習ロス + クラスタロス) の合計
+        """
+        # 1) 既存の対照学習ロス計算
+        nutrient_emb = self.nutrient_encoder(data["intention"].nutrient)  # (B, output_dim)
+        caption_emb = self.caption_encoder(data["intention"].caption)     # (B, output_dim)
+
+        contrastive_loss = self.loss_contrastive(nutrient_emb, caption_emb)
+
+        # 2) クラスタロス計算
+        cluster_loss = 0.0
+        cluster_ids = data["intention"].cluster  # shape: (B,)
+
+        # =============== (A) クラスタ内損失 ================
+        #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
+        cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
+        intra_loss = F.mse_loss(data["intention"].nutrient,
+                                cluster_centers_for_samples,
+                                reduction='mean')
+
+        # =============== (B) クラスタ間損失 ================
+        #  クラスタ間の中心がマージンより小さければペナルティ（離す）
+        #  Pairwise距離を計算: shape (num_clusters, num_clusters)
+        cent = self.cluster_centers  # shape (num_clusters, output_dim)
+        dist_matrix = (cent.unsqueeze(0) - cent.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
+
+        # 対角成分(=0)を除いたクラスタ間の距離
+        num_clusters = cent.size(0)
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
+
+        # マージン・ヒンジ損失
+        inter_loss = F.relu(self.cluster_margin - dist_except_diag).mean()
+
+        cluster_loss = intra_loss + inter_loss
+
+        # 3) 合計損失 = 対照学習ロス + クラスタロス(重み付き)
+        total_loss = contrastive_loss + self.cluster_weight * cluster_loss
+
+        # 4) 正規化した埋め込みを返す
+        caption_emb_norm = F.normalize(caption_emb, p=2, dim=1)
+        nutrient_emb_norm = F.normalize(nutrient_emb, p=2, dim=1)
+
+        return caption_emb_norm, nutrient_emb_norm, total_loss
 
 
 class TasteGNN(nn.Module):
@@ -258,6 +360,7 @@ class RecommendationModel(nn.Module):
         fusion_gnn_resisual_alpha: float,
         is_abration_wo_cl: bool,
         is_abration_wo_taste: bool,
+        cluster_centers: torch.Tensor,
     ):
         super().__init__()
         os.environ['TORCH_USE_CUDA_DSA'] = '1'
@@ -294,7 +397,10 @@ class RecommendationModel(nn.Module):
                 nutrient_input_dim=nutrient_dim,
                 caption_input_dim=input_vlm_caption_dim,
                 output_dim=hidden_dim,
-                temperature=temperature
+                temperature=temperature,
+                cluster_centers=cluster_centers,
+                cluster_margin=0.5,
+                cluster_weight=1.0
             )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),
