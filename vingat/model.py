@@ -361,8 +361,8 @@ class RecommendationModel(nn.Module):
         is_abration_wo_cl: bool,
         is_abration_wo_taste: bool,
         cluster_centers: torch.Tensor,
-        cluster_margin=0.8,
-        cluster_loss_weight=2.0,
+        cluster_margin: float,
+        cluster_loss_weight: float,
     ):
         super().__init__()
         os.environ['TORCH_USE_CUDA_DSA'] = '1'
