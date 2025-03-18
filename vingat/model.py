@@ -5,7 +5,7 @@ from torch_geometric.nn.norm import BatchNorm
 from torch_geometric.data import HeteroData
 import torch.nn as nn
 import os
-from vingat.loss import ContrastiveLoss, XENDCGLoss
+from vingat.loss import ContrastiveLoss
 
 
 # 新しいCL
