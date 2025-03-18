@@ -12,6 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 from datetime import datetime
 import pytz
 from vingat.loader import core_file_loader
+from vingat.loss import XENDCGLoss
 
 
 def now():
@@ -153,10 +154,13 @@ def train_one_epoch(
     loss_histories: Dict[str, List[torch.Tensor]] = {
         "total_loss": [],
         "main_loss": [],
+        "xe_loss": []
     }
     node_mean = []
     mhandler = MetricsHandler(device=device, threshold=0.5)
     shandler = ScoreMetricHandler(device=device)
+
+    xe_loss = XENDCGLoss(k=10)
 
     model.train()
 
@@ -204,6 +208,10 @@ def train_one_epoch(
 
         # 損失の計算
         main_loss = criterion(pos_scores, neg_scores, model.parameters())
+        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
+                                 torch.cat([
+                                     torch.ones_like(pos_scores, device=device),
+                                     torch.ones_like(neg_scores, device=device)]))
 
         #
         loss = main_loss  # * main_loss_rate
@@ -220,6 +228,7 @@ def train_one_epoch(
 
         loss_histories["total_loss"].append(loss.item())
         loss_histories["main_loss"].append((main_loss_rate * main_loss).item())
+        loss_histories["xe_loss"].append(xe_loss_result.item())
         for entry in loss_entories:
             if entry["name"] not in loss_histories.keys():
                 loss_histories[entry["name"]] = []
