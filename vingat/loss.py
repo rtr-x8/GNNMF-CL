@@ -57,3 +57,43 @@ class ContrastiveLoss(nn.Module):
             losses.append(loss)
 
         return torch.mean(torch.stack(losses))  # 損失の平均を返す
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class XENDCGLoss(nn.Module):
+    def __init__(self, k=None):
+        super(XENDCGLoss, self).__init__()
+        self.k = k
+
+    def dcg(self, scores):
+        gains = 2 ** scores - 1
+        discounts = torch.log2(torch.arange(len(scores), device=scores.device).float() + 2)
+        return (gains / discounts).sum()
+
+    def ndcg(self, predictions, targets):
+        if self.k is not None:
+            predictions = predictions[:self.k]
+            targets = targets[:self.k]
+
+        sorted_preds_indices = torch.argsort(predictions, descending=True)
+        sorted_targets_by_preds = targets[sorted_preds_indices]
+
+        ideal_sorted_targets, _ = torch.sort(targets, descending=True)
+
+        dcg_val = self.dcg(sorted_targets_by_preds)
+        ideal_dcg_val = self.dcg(ideal_sorted_targets)
+
+        ndcg_score = dcg_val / (ideal_dcg_val + 1e-8)
+        return ndcg_score
+
+    def forward(self, predictions, targets):
+        # predictions, targets は [num_items] の1次元テンソル
+        xe_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='mean')
+        pred_scores = torch.sigmoid(predictions)
+        ndcg_weight = self.ndcg(pred_scores, targets.detach())
+        loss = xe_loss * (1 - ndcg_weight)
+        return loss
