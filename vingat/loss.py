@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+from torchmetrics.retrieval import RetrievalNormalizedDCG
 
 
 class BPRLoss(nn.Module):
@@ -60,34 +61,20 @@ class ContrastiveLoss(nn.Module):
 
 
 class XENDCGLoss(nn.Module):
-    def __init__(self, k=None):
+    def __init__(self, k):
         super(XENDCGLoss, self).__init__()
         self.k = k
+        self.ndcg = RetrievalNormalizedDCG(top_k=k)
 
-    def dcg(self, scores):
-        gains = 2 ** scores - 1
-        discounts = torch.log2(torch.arange(len(scores), device=scores.device).float() + 2)
-        return (gains / discounts).sum()
-
-    def ndcg(self, predictions, targets):
-        if self.k is not None:
-            predictions = predictions[:self.k]
-            targets = targets[:self.k]
-
-        sorted_preds_indices = torch.argsort(predictions, descending=True)
-        sorted_targets_by_preds = targets[sorted_preds_indices]
-
-        ideal_sorted_targets, _ = torch.sort(targets, descending=True)
-
-        dcg_val = self.dcg(sorted_targets_by_preds)
-        ideal_dcg_val = self.dcg(ideal_sorted_targets)
-
-        ndcg_score = dcg_val / (ideal_dcg_val + 1e-8)
-        return ndcg_score
-
-    def forward(self, predictions, targets):
-        # predictions はすでにsigmoid済み (0~1)
-        xe_loss = F.binary_cross_entropy(predictions, targets, reduction='mean')
-        ndcg_weight = self.ndcg(predictions.detach(), targets.detach())
-        loss = xe_loss * (1 - ndcg_weight)
+    def forward(self, predictions, targets, indexes):
+        xe_loss = nn.functional.binary_cross_entropy(predictions, targets)
+        ndcg_score = self.ndcg(predictions, targets, indexes=indexes)
+        loss = xe_loss * (1 - ndcg_score)
         return loss
+
+
+class LossItem():
+    def __init__(self, name: str, loss: torch.Tensor, weight: float):
+        self.name = name
+        self.loss = loss
+        self.weight = weight
