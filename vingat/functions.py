@@ -13,7 +13,7 @@ from datetime import datetime
 import pytz
 from vingat.loader import core_file_loader
 from vingat.loss import XENDCGLoss
-from collections import defaultdict
+from vingat.loss import LossItem
 
 
 def now():
@@ -188,17 +188,14 @@ def train_one_epoch(
     train_loader: torch.utils.data.DataLoader,
     criterion: Callable,
     max_grad_norm: float,
+    recommendation_loss_weight: float,
 ):
     """
     DataLoaderによってネガティブサンプリングされている時用
     """
     model.to(device)
 
-    loss_histories: Dict[str, List[torch.Tensor]] = {
-        "total_loss": [],
-        "main_loss": [],
-        "xe_loss": []
-    }
+    loss_histories: Dict[str, List[torch.Tensor]] = {}
     node_mean = []
     mhandler = MetricsHandler(device=device, threshold=0.5)
     shandler = ScoreMetricHandler(device=device)
@@ -214,11 +211,6 @@ def train_one_epoch(
         out, loss_entories = model(batch_data)
 
         main_loss_rate = 1.0
-        if len(loss_entories) > 0:
-            main_loss_rate -= sum([entry["weight"] for entry in loss_entories])
-
-        if main_loss_rate < 0:
-            raise ValueError(f"main loss rate is negative, : {main_loss_rate}")
 
         # エッジのラベルとエッジインデックスを取得
         edge_label_index = batch_data['user', 'buys', 'item'].edge_label_index
@@ -254,6 +246,9 @@ def train_one_epoch(
 
         # 損失の計算
         main_loss = criterion(pos_scores, neg_scores, model.parameters())
+        main_loss_item = LossItem(name="main_loss", loss=main_loss,
+                                  weight=recommendation_loss_weight)
+        loss_entories.append(main_loss_item)
 
         xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
                                  torch.cat([
@@ -261,27 +256,17 @@ def train_one_epoch(
                                      torch.zeros_like(neg_scores)
                                  ]),
                                  torch.cat([pos_user_ids, neg_user_ids]))
+        loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result, weight=main_loss_rate))
 
-        loss = main_loss  # * main_loss_rate
-        if len(loss_entories) == 1:
-            loss = main_loss + loss_entories[0]["loss"]
-
-        if len(loss_entories) > 1:
-            raise ValueError(f'loss entry has {len(loss_entories)} losses')
-
+        loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
 
         optimizer.step()
 
-        loss_histories["total_loss"].append(loss.item())
-        loss_histories["main_loss"].append((main_loss_rate * main_loss).item())
-        loss_histories["xe_loss"].append(xe_loss_result.item())
-        for entry in loss_entories:
-            if entry["name"] not in loss_histories.keys():
-                loss_histories[entry["name"]] = []
-            loss_histories[entry["name"]].append(
-                (entry["loss"] * entry["weight"]).item()
+        for loss_item in loss_entories:
+            loss_histories.setdefault(loss_item.name, []).append(
+                loss_item.loss.item()
             )
 
         mhandler.update(
@@ -355,6 +340,7 @@ def train_func(
     project_name: str,
     experiment_name: str,
     popularities: dict,
+    recommendation_loss_weight: float,
     patience=4,
     validation_interval=5,
     max_grad_norm=1.0,
@@ -378,6 +364,7 @@ def train_func(
             criterion=criterion,
             train_loader=train_loader,
             max_grad_norm=max_grad_norm,
+            recommendation_loss_weight=recommendation_loss_weight
             # freq_tensor=popularities  # For Negative Sampling
         )
 
