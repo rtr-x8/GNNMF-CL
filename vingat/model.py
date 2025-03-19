@@ -65,7 +65,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             cluster_centers: shape = [num_clusters, nutrient_input_dim]
 +                事前に算出したクラスタ中心（生の栄養素次元で計算）
             cluster_margin: クラスタ間の分離を制御するマージン
-            cluster_weight: 
+            cluster_weight:
         """
         super().__init__()
         self.temperature = temperature

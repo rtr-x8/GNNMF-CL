@@ -2,7 +2,6 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torchmetrics.retrieval import RetrievalNormalizedDCG
-from typing import List
 
 
 class BPRLoss(nn.Module):
