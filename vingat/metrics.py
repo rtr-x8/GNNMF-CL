@@ -165,14 +165,23 @@ class FastNDCG(nn.Module):
         predictions = predictions[indices]
         targets = targets[indices]
 
-        # ユーザーごとの境界を計算
-        _, counts = torch.unique_consecutive(sorted_indexes, return_counts=True)
-        user_splits = torch.cumsum(counts, dim=0)
+        # ユーザーごとのユニークなインデックスとカウントを取得
+        unique_users, counts = torch.unique_consecutive(sorted_indexes, return_counts=True)
+
+        # ユーザーを30%サンプリング
+        num_sampled_users = max(1, int(len(unique_users) * 0.3))
+        sampled_users = unique_users[torch.randperm(len(unique_users))[:num_sampled_users]]
+        sampled_users_set = set(sampled_users.tolist())
 
         # 各ユーザーごとにDCGとIDCGを計算
         ndcg_list = []
         start = 0
-        for end in user_splits:
+        for user, count in zip(unique_users, counts):
+            end = start + count
+            if user.item() not in sampled_users_set:
+                start = end
+                continue
+
             preds_user = predictions[start:end]
             targets_user = targets[start:end]
             start = end
