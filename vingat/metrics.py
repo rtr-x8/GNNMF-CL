@@ -155,37 +155,56 @@ class FastNDCG(nn.Module):
 
     def forward(self, predictions, targets, indexes):
         device = predictions.device
-        unique_users = indexes.unique()
-        ndcg_scores = []
+        k = self.k
 
-        for user in unique_users:
-            mask = indexes == user
-            preds_user = predictions[mask]
-            targets_user = targets[mask]
+        # ターゲットが存在するデータのみを使用
+        mask = targets > 0
+        predictions = predictions[mask]
+        targets = targets[mask]
+        indexes = indexes[mask]
 
-            if len(targets_user) == 0 or targets_user.sum() == 0:
-                continue  # 正例なしのユーザーはスキップ
-
-            # 上位kまでのスコアとターゲットを取得
-            # _, idx_preds_sorted = torch.sort(preds_user, descending=True)
-            k = min(self.k, preds_user.size(0))
-            targets_sorted_by_preds, _ = torch.topk(preds_user, k)
-
-            a = torch.arange(2, targets_sorted_by_preds.size(0) + 2, device=device)
-            dcg = (targets_sorted_by_preds / torch.log2(a)).sum()
-
-            # 理想の並び順を取得
-            ideal_sorted_targets, _ = torch.topk(targets_user, k)
-
-            b = torch.arange(2, ideal_sorted_targets.size(0) + 2, device=device)
-            ideal_dcg = (ideal_sorted_targets / torch.log2(b)).sum()
-
-            if ideal_dcg == 0:
-                continue
-
-            ndcg_scores.append(dcg / ideal_dcg)
-
-        if len(ndcg_scores) == 0:
+        if predictions.numel() == 0:
             return torch.tensor(0.0, device=device)
 
-        return torch.stack(ndcg_scores).mean()
+        # ユーザーごとにデータをソート
+        sorted_indexes, indices = indexes.sort()
+        predictions = predictions[indices]
+        targets = targets[indices]
+
+        # ユーザーごとの境界を計算
+        _, counts = torch.unique_consecutive(sorted_indexes, return_counts=True)
+        user_splits = torch.cumsum(counts, dim=0)
+
+        # 各ユーザーごとにDCGとIDCGを計算
+        dcg_list = []
+        idcg_list = []
+        start = 0
+        for end in user_splits:
+            preds_user = predictions[start:end]
+            targets_user = targets[start:end]
+            start = end
+
+            if targets_user.sum() == 0:
+                continue
+
+            k_user = min(k, preds_user.size(0))
+            _, indices_k = torch.topk(preds_user, k_user)
+            targets_k = targets_user[indices_k]
+
+            discounts = torch.log2(torch.arange(2, k_user + 2, device=device))
+            dcg = (targets_k / discounts).sum()
+
+            ideal_targets_k, _ = torch.topk(targets_user, k_user)
+            idcg = (ideal_targets_k / discounts).sum()
+
+            if idcg == 0:
+                continue
+
+            dcg_list.append(dcg)
+            idcg_list.append(idcg)
+
+        if len(dcg_list) == 0:
+            return torch.tensor(0.0, device=device)
+
+        ndcg_scores = torch.tensor(dcg_list, device=device) / torch.tensor(idcg_list, device=device)
+        return ndcg_scores.mean()
