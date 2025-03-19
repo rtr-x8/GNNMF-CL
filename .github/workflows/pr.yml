@@ -1,4 +1,4 @@
-name: Update Package Version
+name: Python Linter
 
 on:
   pull_request:
