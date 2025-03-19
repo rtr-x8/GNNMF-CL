@@ -13,6 +13,7 @@ from datetime import datetime
 import pytz
 from vingat.loader import core_file_loader
 from vingat.loss import XENDCGLoss
+from collections import defaultdict
 
 
 def now():
@@ -138,6 +139,37 @@ def calculate_statistics(data):
     return df
 
 
+def create_batch_predictions_targets(pos_scores, pos_user_ids, neg_scores, neg_user_ids, padding_value=-1.0):
+    user_scores = {}
+
+    # 正例を追加
+    for uid, score in zip(pos_user_ids.tolist(), pos_scores.tolist()):
+        user_scores.setdefault(uid, []).append((score, 1.0))
+
+    # 負例を追加
+    for uid, score in zip(neg_user_ids.tolist(), neg_scores.tolist()):
+        user_scores.setdefault(uid, []).append((score, 0.0))
+
+    # 最大のアイテム数を計算
+    max_items = max(len(scores) for scores in user_scores.values())
+
+    predictions, targets = [], []
+
+    # 各ユーザーごとにpaddingしてpredictions, targetsを生成
+    for uid in sorted(user_scores.keys()):
+        scores_labels = user_scores[uid]
+        scores = torch.tensor([sl[0] for sl in scores_labels])
+        labels = torch.tensor([sl[1] for sl in scores_labels])
+
+        padding_length = max_items = max_items - len(scores)
+
+        predictions.append(torch.cat([scores, torch.full((padding_length,), -1.0)]))
+        targets.append(torch.cat([labels := torch.tensor([sl[1] for sl in scores_labels]), 
+                                  torch.zeros(padding_length := max_items - len(labels))]))
+
+    return torch.stack(predictions), torch.stack(targets)
+
+
 def train_one_epoch(
     model: nn.Module,
     device: torch.device,
@@ -182,6 +214,7 @@ def train_one_epoch(
 
         # ユーザーとレシピの埋め込みを取得
         user_embeddings = out['user'].x
+        user_ids = out["user"].id
         recipe_embeddings = out['item'].x
 
         # 正例と負例のマスクを取得
@@ -195,11 +228,13 @@ def train_one_epoch(
         # 正例のスコアを計算
         pos_user_embed = user_embed[pos_mask]
         pos_recipe_embed = recipe_embed[pos_mask]
+        pos_user_ids = user_ids[edge_label_index[0]][pos_mask]
         pos_scores = model.predict(pos_user_embed, pos_recipe_embed).squeeze()
 
         # 負例のスコアを計算
         neg_user_embed = user_embed[neg_mask]
         neg_recipe_embed = recipe_embed[neg_mask]
+        neg_user_ids = user_ids[edge_label_index[0]][neg_mask]
         neg_scores = model.predict(neg_user_embed, neg_recipe_embed).squeeze()
 
         if len(pos_scores) != len(neg_scores):
@@ -208,12 +243,15 @@ def train_one_epoch(
 
         # 損失の計算
         main_loss = criterion(pos_scores, neg_scores, model.parameters())
-        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
-                                 torch.cat([
-                                     torch.ones_like(pos_scores, device=device),
-                                     torch.ones_like(neg_scores, device=device)]))
 
-        #
+        xe_preds, xe_targets = create_batch_predictions_targets(
+            pos_scores=pos_scores,
+            pos_user_ids=pos_user_ids,
+            neg_scores=neg_scores,
+            neg_user_ids=neg_user_ids
+        )
+        xe_loss_result = xe_loss(xe_preds, xe_targets)
+
         loss = main_loss  # * main_loss_rate
         if len(loss_entories) == 1:
             loss = main_loss + loss_entories[0]["loss"]
