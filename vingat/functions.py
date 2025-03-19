@@ -203,8 +203,9 @@ def train_one_epoch(
     xe_loss = XENDCGLoss(k=10)
 
     model.train()
-
+    counter = 0
     for batch_data in tqdm(train_loader, desc="[Train]"):
+        counter += 1
         optimizer.zero_grad()
         batch_data = batch_data.to(device)
 
@@ -250,13 +251,14 @@ def train_one_epoch(
                                   weight=recommendation_loss_weight)
         loss_entories.append(main_loss_item)
 
-        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
-                                 torch.cat([
-                                     torch.ones_like(pos_scores),
-                                     torch.zeros_like(neg_scores)
-                                 ]),
-                                 torch.cat([pos_user_ids, neg_user_ids]))
-        loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result, weight=main_loss_rate))
+        if counter % 2 == 0:
+            xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
+                                     torch.cat([
+                                         torch.ones_like(pos_scores),
+                                         torch.zeros_like(neg_scores)
+                                     ]),
+                                     torch.cat([pos_user_ids, neg_user_ids]))
+            loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result, weight=main_loss_rate))
 
         loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()
