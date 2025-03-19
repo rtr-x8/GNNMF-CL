@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from vingat.metrics import FastNDCG
+from datetime import datetime
 
 
 class BPRLoss(nn.Module):
@@ -67,9 +68,13 @@ class XENDCGLoss(nn.Module):
         self.ndcg = FastNDCG(top_k=k)
 
     def forward(self, predictions, targets, indexes):
+        print(1, datetime.now())
         xe_loss = nn.functional.binary_cross_entropy(predictions, targets)
+        print(2, datetime.now())
         ndcg_score = self.ndcg(predictions, targets, indexes=indexes)
+        print(3, datetime.now())
         loss = xe_loss * (1 - ndcg_score)
+        print(4, datetime.now())
         return loss
 
 
