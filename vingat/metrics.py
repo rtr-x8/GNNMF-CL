@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from torchmetrics import MetricCollection
 from torchmetrics.retrieval import (
     RetrievalRecall,
@@ -145,3 +146,46 @@ class MetricsHandler():
             f"{prefix}{separator}{k}": round(v.item(), num_round)
             for k, v in self.compute().items()
         }
+
+
+class FastNDCG(nn.Module):
+    def __init__(self, top_k):
+        super().__init__()
+        self.k = top_k
+
+    def forward(self, predictions, targets, indexes):
+        device = predictions.device
+        unique_users = indexes.unique()
+        ndcg_scores = []
+
+        for user in unique_users:
+            mask = indexes == user
+            preds_user = predictions[mask]
+            targets_user = targets[mask]
+
+            if len(targets_user) == 0 or targets_user.sum() == 0:
+                continue  # 正例なしのユーザーはスキップ
+
+            # 上位kまでのスコアとターゲットを取得
+            _, idx_preds_sorted = torch.sort(preds_user, descending=True)
+            targets_sorted_by_preds = targets_user[idx_preds_sorted][:self.k]
+
+            a = torch.arange(2, targets_sorted_by_preds.size(0) + 2, device=device)
+            dcg = (targets_sorted_by_preds / torch.log2(a)).sum()
+
+            # 理想の並び順を取得
+            targets_ideal, _ = torch.sort(targets_user, descending=True)
+            ideal_sorted_targets = targets_ideal[:self.k]
+
+            b = torch.arange(2, ideal_sorted_targets.size(0) + 2, device=device)
+            ideal_dcg = (ideal_sorted_targets / torch.log2(b)).sum()
+
+            if ideal_dcg == 0:
+                continue
+
+            ndcg_scores.append(dcg / ideal_dcg)
+
+        if len(ndcg_scores) == 0:
+            return torch.tensor(0.0, device=device)
+
+        return torch.stack(ndcg_scores).mean()

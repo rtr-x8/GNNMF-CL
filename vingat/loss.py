@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torchmetrics.retrieval import RetrievalNormalizedDCG
+from vingat.metrics import FastNDCG
 
 
 class BPRLoss(nn.Module):
@@ -64,7 +64,7 @@ class XENDCGLoss(nn.Module):
     def __init__(self, k):
         super(XENDCGLoss, self).__init__()
         self.k = k
-        self.ndcg = RetrievalNormalizedDCG(top_k=k)
+        self.ndcg = FastNDCG(top_k=k)
 
     def forward(self, predictions, targets, indexes):
         xe_loss = nn.functional.binary_cross_entropy(predictions, targets)
