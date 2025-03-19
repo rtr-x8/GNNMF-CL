@@ -139,8 +139,14 @@ def calculate_statistics(data):
     return df
 
 
-def create_batch_predictions_targets(pos_scores, pos_user_ids, neg_scores, neg_user_ids, padding_value=-1.0):
+def create_batch_predictions_targets(
+    pos_scores: torch.Tensor,
+    pos_user_ids: torch.Tensor,
+    neg_scores: torch.Tensor,
+    neg_user_ids: torch.Tensor
+):
     user_scores = {}
+    device = pos_scores.device
 
     # 正例を追加
     for uid, score in zip(pos_user_ids.tolist(), pos_scores.tolist()):
@@ -161,13 +167,18 @@ def create_batch_predictions_targets(pos_scores, pos_user_ids, neg_scores, neg_u
         scores = torch.tensor([sl[0] for sl in scores_labels])
         labels = torch.tensor([sl[1] for sl in scores_labels])
 
-        padding_length = max_items = max_items - len(scores)
+        padding_length = max_items - len(scores)
 
         predictions.append(torch.cat([scores, torch.full((padding_length,), -1.0)]))
-        targets.append(torch.cat([labels := torch.tensor([sl[1] for sl in scores_labels]), 
-                                  torch.zeros(padding_length := max_items - len(labels))]))
+        labels = torch.tensor([sl[1] for sl in scores_labels])
+        padding_length = max_items - len(labels)
 
-    return torch.stack(predictions), torch.stack(targets)
+        targets.append(torch.cat([
+            labels,
+            torch.zeros(padding_length)
+        ]))
+
+    return torch.stack(predictions).to(device), torch.stack(targets).to(device)
 
 
 def train_one_epoch(
@@ -244,13 +255,12 @@ def train_one_epoch(
         # 損失の計算
         main_loss = criterion(pos_scores, neg_scores, model.parameters())
 
-        xe_preds, xe_targets = create_batch_predictions_targets(
-            pos_scores=pos_scores,
-            pos_user_ids=pos_user_ids,
-            neg_scores=neg_scores,
-            neg_user_ids=neg_user_ids
-        )
-        xe_loss_result = xe_loss(xe_preds, xe_targets)
+        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
+                                 torch.cat([
+                                     torch.ones_like(pos_scores),
+                                     torch.zeros_like(neg_scores)
+                                 ]),
+                                 torch.cat([pos_user_ids, neg_user_ids]))
 
         loss = main_loss  # * main_loss_rate
         if len(loss_entories) == 1:
