@@ -86,8 +86,8 @@ class XENDCGLoss(nn.Module):
         return ndcg_score
 
     def forward(self, predictions, targets):
-        # predictions はすでにsigmoid済み (0~1)
-        xe_loss = F.binary_cross_entropy(predictions, targets, reduction='mean')
-        ndcg_weight = self.ndcg(predictions.detach(), targets.detach())
+        xe_loss = F.binary_cross_entropy_with_logits(predictions, targets, reduction='mean')
+        pred_scores = torch.sigmoid(predictions)
+        ndcg_weight = self.ndcg(pred_scores, targets.detach())
         loss = xe_loss * (1 - ndcg_weight)
         return loss
