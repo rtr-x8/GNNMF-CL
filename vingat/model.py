@@ -54,18 +54,21 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         cluster_margin: float,
         cluster_weight: float,
         cl_loss_weight: float,
-        cluster_inner_weight: float,
+        cluster_inner_weight: float
     ):
         """
         Args:
             nutrient_input_dim: 栄養素ベクトルの次元
             caption_input_dim: キャプションベクトルの次元
             output_dim: 対照学習で出力する埋め込み次元
-            temperature: 既存の対照学習Lossにおける温度パラメータ
+            temperature: 対照学習Lossにおける温度パラメータ
             cluster_centers: shape = [num_clusters, nutrient_input_dim]
-+                事前に算出したクラスタ中心（生の栄養素次元で計算）
+                事前に算出したクラスタ中心（生の栄養素次元で計算）
             cluster_margin: クラスタ間の分離を制御するマージン
-            cluster_weight:
+            cluster_weight: クラスタ内損失の重み
+            cl_loss_weight: 対照学習損失の重み
+            cluster_inner_weight: クラスタ間損失の重み
+            learn_cluster_centers: Trueならクラスタ中心も学習対象にする
         """
         super().__init__()
         self.temperature = temperature
@@ -90,7 +93,6 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # 対照学習用の損失 (CosineSimilarity + temperature)
         self.loss_contrastive = ContrastiveLoss(temperature=temperature)
 
-        # クラスタ中心を保持（必要に応じて勾配を更新しないなら buffer 登録）
         self.register_buffer("cluster_centers", cluster_centers)
 
     def forward(self, data):
@@ -130,20 +132,18 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
         #  Pairwise距離を計算: shape (num_clusters, num_clusters)
-        cent = self.cluster_centers  # shape (num_clusters, output_dim)
-        dist_matrix = (cent.unsqueeze(0) - cent.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
+        cent_emb = self.nutrient_encoder(self.cluster_centers)  # shape: (num_clusters, output_dim)
+        dist_matrix = (cent_emb.unsqueeze(0) - cent_emb.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
 
         # 対角成分(=0)を除いたクラスタ間の距離
-        num_clusters = cent.size(0)
-        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
-        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
+        num_clusters = cent_emb.size(0)
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()
+        dist_except_diag = dist_matrix[~mask]
 
         # マージン・ヒンジ損失
-        # print("dist_except_diag mean:", dist_except_diag.mean().item())
-        # print("dist_except_diag min:", dist_except_diag.min().item())
-        # print("dist_except_diag max:", dist_except_diag.max().item())
-        cluster_margin = dist_except_diag.mean().item()
-        inter_loss = F.relu(cluster_margin - dist_except_diag).mean()
+        margin_tensor = torch.tensor(self.cluster_margin, device=dist_matrix.device,
+                                     dtype=dist_except_diag.dtype)
+        inter_loss = F.relu(margin_tensor - dist_except_diag).mean()
         inter_loss_item = LossItem(
             name="cl_inter_loss", loss=inter_loss, weight=self.cluster_inner_weight
         )
@@ -546,7 +546,9 @@ class RecommendationModel(nn.Module):
         losses: list[LossItem] = []
         if not self.is_abration_wo_cl:
             losses.extend([
-                contrastive_loss, inter_loss, cluster_loss
+                contrastive_loss,
+                inter_loss,
+                cluster_loss
             ])
 
         return data, losses
