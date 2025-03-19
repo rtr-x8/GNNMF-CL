@@ -154,9 +154,7 @@ class FastNDCG(nn.Module):
         self.k = top_k
 
     def forward(self, predictions, targets, indexes):
-        print(predictions.device, targets.device, indexes.device)
         device = predictions.device
-        print(device)
         unique_users = indexes.unique()
         ndcg_scores = []
 
