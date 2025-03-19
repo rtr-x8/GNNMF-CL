@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from torchmetrics import MetricCollection
 from torchmetrics.retrieval import (
     RetrievalRecall,
@@ -148,9 +149,9 @@ class MetricsHandler():
 
 
 class FastNDCG(nn.Module):
-    def __init__(self, k):
+    def __init__(self, top_k):
         super().__init__()
-        self.k = k
+        self.k = top_k
 
     def forward(self, predictions, targets, indexes):
         device = predictions.device
@@ -169,13 +170,15 @@ class FastNDCG(nn.Module):
             _, idx_preds_sorted = torch.sort(preds_user, descending=True)
             targets_sorted_by_preds = targets_user[idx_preds_sorted][:self.k]
 
-            dcg = (targets_sorted_by_preds / torch.log2(torch.arange(2, targets_sorted_by_preds.size(0) + 2, device=device))).sum()
+            a = torch.arange(2, targets_sorted_by_preds.size(0) + 2, device=device)
+            dcg = (targets_sorted_by_preds / torch.log2(a)).sum()
 
             # 理想の並び順を取得
             targets_ideal, _ = torch.sort(targets_user, descending=True)
             ideal_sorted_targets = targets_ideal[:self.k]
 
-            ideal_dcg = (ideal_sorted_targets / torch.log2(torch.arange(2, ideal_sorted_targets.size(0) + 2, device=device))).sum()
+            b = torch.arange(2, ideal_sorted_targets.size(0) + 2, device=device)
+            ideal_dcg = (ideal_sorted_targets / torch.log2(b)).sum()
 
             if ideal_dcg == 0:
                 continue
