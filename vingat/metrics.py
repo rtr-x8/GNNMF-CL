@@ -168,15 +168,14 @@ class FastNDCG(nn.Module):
 
             # 上位kまでのスコアとターゲットを取得
             # _, idx_preds_sorted = torch.sort(preds_user, descending=True)
-            _, topk_indices = torch.topk(preds_user, self.k)
-            targets_sorted_by_preds = targets_user[topk_indices]
+            k = min(self.k, preds_user.size(0))
+            targets_sorted_by_preds, _ = torch.topk(preds_user, k)
 
             a = torch.arange(2, targets_sorted_by_preds.size(0) + 2, device=device)
             dcg = (targets_sorted_by_preds / torch.log2(a)).sum()
 
             # 理想の並び順を取得
-            targets_ideal, _ = torch.sort(targets_user, descending=True)
-            ideal_sorted_targets = targets_ideal[:self.k]
+            ideal_sorted_targets, _ = torch.topk(targets_user, k)
 
             b = torch.arange(2, ideal_sorted_targets.size(0) + 2, device=device)
             ideal_dcg = (ideal_sorted_targets / torch.log2(b)).sum()
