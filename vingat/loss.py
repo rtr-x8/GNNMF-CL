@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torchmetrics.retrieval import RetrievalNormalizedDCG
+from typing import List
 
 
 class BPRLoss(nn.Module):
@@ -71,3 +72,10 @@ class XENDCGLoss(nn.Module):
         ndcg_score = self.ndcg(predictions, targets, indexes=indexes)
         loss = xe_loss * (1 - ndcg_score)
         return loss
+
+
+class LossItem():
+    def __init__(self, name: str, loss: torch.Tensor, weight: float):
+        self.name = name
+        self.loss = loss
+        self.weight = weight

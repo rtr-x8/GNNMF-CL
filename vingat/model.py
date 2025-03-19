@@ -5,7 +5,7 @@ from torch_geometric.nn.norm import BatchNorm
 from torch_geometric.data import HeteroData
 import torch.nn as nn
 import os
-from vingat.loss import ContrastiveLoss
+from vingat.loss import ContrastiveLoss, LossItem
 
 
 # 新しいCL
@@ -53,6 +53,8 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         cluster_centers: torch.Tensor,
         cluster_margin: float,
         cluster_weight: float,
+        cl_loss_weight: float,
+        cluster_inner_weight: float,
     ):
         """
         Args:
@@ -63,12 +65,14 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             cluster_centers: shape = [num_clusters, nutrient_input_dim]
 +                事前に算出したクラスタ中心（生の栄養素次元で計算）
             cluster_margin: クラスタ間の分離を制御するマージン
-            cluster_weight: クラスタロス全体に掛ける重み
+            cluster_weight: 
         """
         super().__init__()
         self.temperature = temperature
         self.cluster_margin = cluster_margin
         self.cluster_weight = cluster_weight
+        self.cl_loss_weight = cl_loss_weight
+        self.cluster_inner_weight = cluster_inner_weight
 
         # 栄養素埋め込み
         self.nutrient_encoder = nn.Sequential(
@@ -107,17 +111,21 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         caption_emb = self.caption_encoder(data["intention"].caption)     # (B, output_dim)
 
         contrastive_loss = self.loss_contrastive(nutrient_emb, caption_emb)
+        contrastive_loss_item = LossItem(
+            name="cl_loss", loss=contrastive_loss, weight=self.cl_loss_weight
+        )
 
         # 2) クラスタロス計算
-        cluster_loss = 0.0
         cluster_ids = data["intention"].cluster  # shape: (B,)
 
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
         cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
-        intra_loss = F.mse_loss(caption_emb,  # TODO; caption_embに変更
+        intra_loss = F.mse_loss(caption_emb,
                                 self.nutrient_encoder(cluster_centers_for_samples),
                                 reduction='mean')
+        cluster_loss_item = LossItem(name="cl_intra_loss", loss=intra_loss,
+                                     weight=self.cluster_weight)
 
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
@@ -131,18 +139,26 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
 
         # マージン・ヒンジ損失
-        inter_loss = F.relu(self.cluster_margin - dist_except_diag).mean()
-
-        cluster_loss = intra_loss + inter_loss
-
-        # 3) 合計損失 = 対照学習ロス + クラスタロス(重み付き)
-        total_loss = contrastive_loss + self.cluster_weight * cluster_loss
+        # print("dist_except_diag mean:", dist_except_diag.mean().item())
+        # print("dist_except_diag min:", dist_except_diag.min().item())
+        # print("dist_except_diag max:", dist_except_diag.max().item())
+        cluster_margin = dist_except_diag.mean().item()
+        inter_loss = F.relu(cluster_margin - dist_except_diag).mean()
+        inter_loss_item = LossItem(
+            name="cl_inter_loss", loss=inter_loss, weight=self.cluster_inner_weight
+        )
 
         # 4) 正規化した埋め込みを返す
         caption_emb_norm = F.normalize(caption_emb, p=2, dim=1)
         nutrient_emb_norm = F.normalize(nutrient_emb, p=2, dim=1)
 
-        return caption_emb_norm, nutrient_emb_norm, total_loss
+        return (
+            caption_emb_norm,
+            nutrient_emb_norm,
+            contrastive_loss_item,
+            inter_loss_item,
+            cluster_loss_item
+        )
 
 
 class TasteGNN(nn.Module):
@@ -402,7 +418,9 @@ class RecommendationModel(nn.Module):
                 temperature=temperature,
                 cluster_centers=cluster_centers,
                 cluster_margin=cluster_margin,
-                cluster_weight=cluster_loss_weight
+                cluster_weight=cluster_loss_weight,
+                cl_loss_weight=cl_loss_rate,
+                cluster_inner_weight=1.0
             )
             self.intention_cl_after = nn.Sequential(
                 # DictBatchNorm(hidden_dim, device, ["intention"]),
@@ -509,7 +527,7 @@ class RecommendationModel(nn.Module):
         # data.set_value_dict("x", self.layer_norm.initial_forward(data.x_dict))
 
         if not self.is_abration_wo_cl:
-            intention_x, _, cl_loss = self.intention_cl(data)
+            intention_x, _, contrastive_loss, inter_loss, cluster_loss = self.intention_cl(data)
             data.set_value_dict("x", {
                 "intention": intention_x
             })
@@ -525,8 +543,10 @@ class RecommendationModel(nn.Module):
 
         data.set_value_dict("x", self.layer_norm.main_forward(data.x_dict))
 
-        losses = []
+        losses: list[LossItem] = []
         if not self.is_abration_wo_cl:
-            losses.append({"name": "cl_loss", "loss": cl_loss, "weight": self.cl_loss_rate})
+            losses.extend([
+                contrastive_loss, inter_loss, cluster_loss
+            ])
 
         return data, losses
