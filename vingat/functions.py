@@ -145,7 +145,7 @@ def create_batch_predictions_targets(
     neg_scores: torch.Tensor,
     neg_user_ids: torch.Tensor
 ):
-    user_scores = {}
+    user_scores: Dict[int, torch.Tensor] = {}
     device = pos_scores.device
 
     # 正例を追加
