@@ -251,7 +251,7 @@ def train_one_epoch(
                                   weight=recommendation_loss_weight)
         loss_entories.append(main_loss_item)
 
-        if counter % 2 == 0:
+        if counter % 3 == 0:
             xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
                                      torch.cat([
                                          torch.ones_like(pos_scores),
