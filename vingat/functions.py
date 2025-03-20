@@ -232,13 +232,13 @@ def train_one_epoch(
         # 正例のスコアを計算
         pos_user_embed = user_embed[pos_mask]
         pos_recipe_embed = recipe_embed[pos_mask]
-        #pos_user_ids = user_ids[edge_label_index[0]][pos_mask]
+        pos_user_ids = user_ids[edge_label_index[0]][pos_mask]
         pos_scores = model.predict(pos_user_embed, pos_recipe_embed).squeeze()
 
         # 負例のスコアを計算
         neg_user_embed = user_embed[neg_mask]
         neg_recipe_embed = recipe_embed[neg_mask]
-        #neg_user_ids = user_ids[edge_label_index[0]][neg_mask]
+        neg_user_ids = user_ids[edge_label_index[0]][neg_mask]
         neg_scores = model.predict(neg_user_embed, neg_recipe_embed).squeeze()
 
         if len(pos_scores) != len(neg_scores):
@@ -260,18 +260,15 @@ def train_one_epoch(
             print("neg nan: ", neg_nan_count, "/", neg_count)
             print("u emb", pos_user_embed, neg_user_embed)
             print("r emb", pos_recipe_embed, neg_recipe_embed)
-        """
-        if counter % 3 == 0:
-            print("do XE")
-            xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
-                                     torch.cat([
-                                         torch.ones_like(pos_scores),
-                                         torch.zeros_like(neg_scores)
-                                     ]),
-                                     torch.cat([pos_user_ids, neg_user_ids]))
-            loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result, 
-                                          weight=main_loss_rate))
-        """
+
+        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
+                                 torch.cat([
+                                     torch.ones_like(pos_scores),
+                                     torch.zeros_like(neg_scores)
+                                 ]),
+                                 torch.cat([pos_user_ids, neg_user_ids]))
+        loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result,
+                                      weight=main_loss_rate))
 
         loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()

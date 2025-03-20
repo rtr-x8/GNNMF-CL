@@ -135,18 +135,19 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
         #  Pairwise距離を計算: shape (num_clusters, num_clusters)
-        cent_emb = self.nutrient_encoder(self.cluster_centers)  # shape: (num_clusters, output_dim)
-        dist_matrix = (cent_emb.unsqueeze(0) - cent_emb.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
+        cent = self.cluster_centers  # shape (num_clusters, output_dim)
+        dist_matrix = (cent.unsqueeze(0) - cent.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
 
         # 対角成分(=0)を除いたクラスタ間の距離
-        num_clusters = cent_emb.size(0)
-        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()
-        dist_except_diag = dist_matrix[~mask]
+        num_clusters = cent.size(0)
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素num_clusters = cent.size(0)
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
 
         # マージン・ヒンジ損失
-        margin_tensor = torch.tensor(self.cluster_margin, device=dist_matrix.device,
-                                     dtype=dist_except_diag.dtype)
-        inter_loss = F.relu(margin_tensor - dist_except_diag).mean()
+        cluster_margin = dist_except_diag.mean().item()
+        inter_loss = F.relu(cluster_margin - dist_except_diag).mean()
         inter_loss_item = LossItem(
             name="cl_inter_loss", loss=inter_loss, weight=self.cluster_inner_weight
         )
