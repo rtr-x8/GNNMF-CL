@@ -260,15 +260,15 @@ def train_one_epoch(
             print("neg nan: ", neg_nan_count, "/", neg_count)
             print("u emb", pos_user_embed, neg_user_embed)
             print("r emb", pos_recipe_embed, neg_recipe_embed)
-
-        xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
-                                 torch.cat([
-                                     torch.ones_like(pos_scores),
-                                     torch.zeros_like(neg_scores)
-                                 ]),
-                                 torch.cat([pos_user_ids, neg_user_ids]))
-        loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result,
-                                      weight=main_loss_rate))
+        if counter % 3 == 0:
+            xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
+                                     torch.cat([
+                                         torch.ones_like(pos_scores),
+                                         torch.zeros_like(neg_scores)
+                                     ]),
+                                     torch.cat([pos_user_ids, neg_user_ids]))
+            loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result,
+                                          weight=main_loss_rate))
 
         loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()

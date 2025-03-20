@@ -141,7 +141,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # 対角成分(=0)を除いたクラスタ間の距離
         num_clusters = cent.size(0)
         mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
-        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素num_clusters = cent.size(0)
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1))
         mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
         dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
 
