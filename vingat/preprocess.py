@@ -47,3 +47,38 @@ def filter_recipe_ingredient(
     recip_ing[_key] = recip_ing[_key].map(mapping_dict).fillna(recip_ing[_key]).astype(int)
     recip_ing = recip_ing.drop_duplicates(subset=['recipe_id', _key])
     return recip_ing
+
+
+class NutrientStandardPreprocess():
+    def __init__(self, use_nutrients):
+        self.scalar = StandardScaler()
+        self.use_nutrients = use_nutrients
+
+    def fit(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.scalar.fit_transform(df[self.use_nutrients])
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        return self.scalar.transform(df[self.use_nutrients])
+
+    def do(
+        self,
+        train_recipe_ids: List,
+        test_recipe_ids: List,
+        val_recipe_ids: List,
+        recipe_nutrients: pd.DataFrame,
+    ):
+        _rn = recipe_nutrients.copy()
+        train = _rn.loc[_rn.index.isin(train_recipe_ids)]
+        test = _rn.loc[_rn.index.isin(test_recipe_ids)]
+        val = _rn.loc[_rn.index.isin(val_recipe_ids)]
+
+        self.scalar.fit(train[self.use_nutrients])
+        train = self.scalar.fit(train[self.use_nutrients])
+        test = self.scalar.fit(test[self.use_nutrients])
+        val = self.scalar.fit(val[self.use_nutrients])
+
+        _rn.loc[_rn.index == train_recipe_ids][self.use_nutrients] = train
+        _rn.loc[_rn.index == test_recipe_ids][self.use_nutrients] = test
+        _rn.loc[_rn.index == val_recipe_ids][self.use_nutrients] = val
+
+        return _rn
