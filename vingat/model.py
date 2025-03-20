@@ -123,27 +123,31 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
         cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
-        intra_loss = F.mse_loss(caption_emb,
-                                self.nutrient_encoder(cluster_centers_for_samples),
-                                reduction='mean')
+        cluster_centers_emb = self.nutrient_encoder(cluster_centers_for_samples.detach())
+        intra_loss = F.mse_loss(
+            caption_emb,
+            cluster_centers_emb,
+            reduction='mean'
+        )
         cluster_loss_item = LossItem(name="cl_intra_loss", loss=intra_loss,
                                      weight=self.cluster_weight)
 
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
         #  Pairwise距離を計算: shape (num_clusters, num_clusters)
-        cent_emb = self.nutrient_encoder(self.cluster_centers)  # shape: (num_clusters, output_dim)
-        dist_matrix = (cent_emb.unsqueeze(0) - cent_emb.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
+        cent = self.cluster_centers  # shape (num_clusters, output_dim)
+        dist_matrix = (cent.unsqueeze(0) - cent.unsqueeze(1)).pow(2).sum(dim=-1).sqrt()
 
         # 対角成分(=0)を除いたクラスタ間の距離
-        num_clusters = cent_emb.size(0)
-        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()
-        dist_except_diag = dist_matrix[~mask]
+        num_clusters = cent.size(0)
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1))
+        mask = torch.eye(num_clusters, device=dist_matrix.device).bool()  # (num_clusters, n_cluster
+        dist_except_diag = dist_matrix[~mask]  # flatten された (num_clusters*(num_clusters-1)) 要素
 
         # マージン・ヒンジ損失
-        margin_tensor = torch.tensor(self.cluster_margin, device=dist_matrix.device,
-                                     dtype=dist_except_diag.dtype)
-        inter_loss = F.relu(margin_tensor - dist_except_diag).mean()
+        cluster_margin = dist_except_diag.mean().item()
+        inter_loss = F.relu(cluster_margin - dist_except_diag).mean()
         inter_loss_item = LossItem(
             name="cl_inter_loss", loss=inter_loss, weight=self.cluster_inner_weight
         )

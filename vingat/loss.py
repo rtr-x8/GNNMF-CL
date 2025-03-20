@@ -67,6 +67,10 @@ class XENDCGLoss(nn.Module):
         self.ndcg = FastNDCG(top_k=k)
 
     def forward(self, predictions, targets, indexes):
+        # print("predictions", predictions.shape, ", targets", targets.shape)
+        # print("device", predictions.device, targets.device)
+        # print("prediction min", predictions.min(), ", predictions max", predictions.max())
+        # print("targets min", targets.min(), ", targets max", targets.max())
         xe_loss = nn.functional.binary_cross_entropy(predictions, targets)
         ndcg_score = self.ndcg(predictions, targets, indexes=indexes)
         loss = xe_loss * (1 - ndcg_score)
