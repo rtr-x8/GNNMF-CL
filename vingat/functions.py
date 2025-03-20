@@ -251,7 +251,18 @@ def train_one_epoch(
                                   weight=recommendation_loss_weight)
         loss_entories.append(main_loss_item)
 
+        pos_nan_count = torch.isnan(pos_scores).sum().item()
+        neg_nan_count = torch.isnan(neg_scores).sum().item()
+        pos_count = pos_scores.numel()
+        neg_count = neg_scores.numel()
+        if pos_nan_count > 0 or neg_nan_count > 0:
+            print("pos nan: ", pos_nan_count, "/", pos_count)
+            print("neg nan: ", neg_nan_count, "/", neg_count)
+            print("u emb", pos_user_embed, neg_user_embed)
+            print("r emb", pos_recipe_embed, neg_recipe_embed)
+        """
         if counter % 3 == 0:
+            print("do XE")
             xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
                                      torch.cat([
                                          torch.ones_like(pos_scores),
@@ -260,6 +271,7 @@ def train_one_epoch(
                                      torch.cat([pos_user_ids, neg_user_ids]))
             loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result, 
                                           weight=main_loss_rate))
+        """
 
         loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()
