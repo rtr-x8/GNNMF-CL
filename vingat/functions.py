@@ -232,13 +232,13 @@ def train_one_epoch(
         # 正例のスコアを計算
         pos_user_embed = user_embed[pos_mask]
         pos_recipe_embed = recipe_embed[pos_mask]
-        pos_user_ids = user_ids[edge_label_index[0]][pos_mask]
+        #pos_user_ids = user_ids[edge_label_index[0]][pos_mask]
         pos_scores = model.predict(pos_user_embed, pos_recipe_embed).squeeze()
 
         # 負例のスコアを計算
         neg_user_embed = user_embed[neg_mask]
         neg_recipe_embed = recipe_embed[neg_mask]
-        neg_user_ids = user_ids[edge_label_index[0]][neg_mask]
+        #neg_user_ids = user_ids[edge_label_index[0]][neg_mask]
         neg_scores = model.predict(neg_user_embed, neg_recipe_embed).squeeze()
 
         if len(pos_scores) != len(neg_scores):
