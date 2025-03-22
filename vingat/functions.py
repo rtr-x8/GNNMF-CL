@@ -199,8 +199,8 @@ def train_one_epoch(
     node_mean = []
     mhandler = MetricsHandler(device=device, threshold=0.5)
     shandler = ScoreMetricHandler(device=device)
-
-    xe_loss = XENDCGLoss(k=10)
+    top_k = 10
+    xe_loss = XENDCGLoss(k=top_k)
 
     model.train()
     counter = 0
@@ -258,17 +258,26 @@ def train_one_epoch(
         if pos_nan_count > 0 or neg_nan_count > 0:
             print("pos nan: ", pos_nan_count, "/", pos_count)
             print("neg nan: ", neg_nan_count, "/", neg_count)
-            print("u emb", pos_user_embed, neg_user_embed)
-            print("r emb", pos_recipe_embed, neg_recipe_embed)
-        if counter % 3 == 0:
-            xe_loss_result = xe_loss(torch.cat([pos_scores, neg_scores]),
-                                     torch.cat([
-                                         torch.ones_like(pos_scores),
-                                         torch.zeros_like(neg_scores)
-                                     ]),
-                                     torch.cat([pos_user_ids, neg_user_ids]))
-            loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result,
-                                          weight=main_loss_rate))
+
+        if counter % 1 == 0:
+            all_scores = torch.cat([pos_scores, neg_scores])
+            all_targets = torch.cat([
+                torch.ones_like(pos_scores),
+                torch.zeros_like(neg_scores)
+            ])
+            all_user_ids = torch.cat([pos_user_ids, neg_user_ids])
+            unique_users, inverse_indices, counts = torch.unique(all_user_ids,
+                                                                 return_inverse=True,
+                                                                 return_counts=True)
+            valid_mask = counts[inverse_indices] >= 10
+            filtered_scores = all_scores[valid_mask]
+            filtered_targets = all_targets[valid_mask]
+            filtered_users = all_user_ids[valid_mask]
+
+            if filtered_scores.numel() > 0:
+                xe_loss_result = xe_loss(filtered_scores, filtered_targets, filtered_users)
+                loss_entories.append(LossItem(name="xe_loss", loss=xe_loss_result,
+                                     weight=main_loss_rate))
 
         loss = sum(loss_item.loss * loss_item.weight for loss_item in loss_entories)
         loss.backward()

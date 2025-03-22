@@ -155,54 +155,27 @@ class FastNDCG(nn.Module):
 
     def forward(self, predictions, targets, indexes):
         device = predictions.device
-        k = self.k
+        unique_users, inverse_indices = torch.unique(indexes, return_inverse=True)
+        num_users = unique_users.size(0)
+        max_items = torch.bincount(inverse_indices).max().item()
 
-        if predictions.numel() == 0:
-            return torch.tensor(0.0, device=device)
+        pred_padded = torch.full((num_users, max_items), -1e9, device=device)
+        target_padded = torch.zeros((num_users, max_items), device=device)
+        counts_per_user = torch.zeros(num_users, dtype=torch.long, device=device)
+        for i in range(predictions.size(0)):
+            u = inverse_indices[i]
+            pos = counts_per_user[u]
+            pred_padded[u, pos] = predictions[i]
+            target_padded[u, pos] = targets[i]
+            counts_per_user[u] = 1
 
-        # ユーザーごとにデータをソート
-        sorted_indexes, indices = indexes.sort()
-        predictions = predictions[indices]
-        targets = targets[indices]
+        _, topk_indices = torch.topk(pred_padded, k=self.k, dim=1)
+        topk_targets = torch.gather(target_padded, 1, topk_indices)
 
-        # ユーザーごとの境界を計算
-        _, counts = torch.unique_consecutive(sorted_indexes, return_counts=True)
-        user_splits = torch.cumsum(counts, dim=0)
+        discounts = torch.log2(torch.arange(2, self.k + 2, device=device))
+        dcg = (topk_targets / discounts).sum(dim=1)
 
-        # 各ユーザーごとにDCGとIDCGを計算
-        ndcg_list = []
-        start = 0
-        for end in user_splits:
+        ideal_targets, _ = torch.sort(target_padded, descending=True, dim=1)
+        idcg = (ideal_targets[:, :self.k] / discounts).sum(dim=1)
 
-            preds_user = predictions[start:end]
-            targets_user = targets[start:end]
-            start = end
-
-            if targets_user.numel() == 0:
-                continue
-
-            k_user = min(k, preds_user.size(0))
-
-            # 予測値に基づいてtargetsをソート
-            sorted_indices = torch.argsort(preds_user, descending=True)
-            sorted_targets_k = targets_user[sorted_indices][:k_user]
-
-            discounts = torch.log2(torch.arange(2, k_user + 2, device=device))
-            dcg = (sorted_targets_k / discounts).sum()
-
-            # 理想的なtargetsは実際のtargetsを降順ソートしたもの
-            ideal_targets_k = torch.sort(targets_user, descending=True)[0][:k_user]
-            idcg = (ideal_targets_k / discounts).sum()
-
-            if idcg == 0:
-                ndcg = torch.tensor(0.0, device=device)
-            else:
-                ndcg = dcg / idcg
-
-            ndcg_list.append(ndcg)
-
-        if len(ndcg_list) == 0:
-            return torch.tensor(0.0, device=device)
-
-        ndcg_scores = torch.stack(ndcg_list)
-        return ndcg_scores.mean()
+        return (dcg / idcg).mean()
