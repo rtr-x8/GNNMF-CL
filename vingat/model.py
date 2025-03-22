@@ -146,7 +146,11 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         print(cluster_means.size(0), cluster_means.shape, unique_ids)
         if cluster_means.size(0) > 1:
             dist_matrix = torch.cdist(cluster_means, cluster_means, p=2)
-            inter_loss = F.relu(self.cluster_margin - dist_matrix[~torch.eye(dist_matrix.size(0), dtype=bool, device=dist_matrix.device)]).mean()
+            inter_loss = F.relu(
+                self.cluster_margin - dist_matrix[~torch.eye(
+                    dist_matrix.size(0),
+                    dtype=bool, device=dist_matrix.device
+                )]).mean()
         else:
             inter_loss = torch.tensor(0.0, device=nutrient_emb.device)
 
