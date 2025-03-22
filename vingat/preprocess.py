@@ -61,8 +61,12 @@ class NutrientStandardPreprocess():
         return self.scalar.transform(df[self.use_nutrients])
 
     def transform_from_tensor(self, t: torch.Tensor) -> torch.Tensor:
-        df = pd.DataFrame(t.cpu().numpy())
-        return torch.tensor(df.to_numpy(), device=t.device)
+        # 入力tensorをnumpyに変換してStandardScalerを適用する
+        np_array = t.cpu().numpy()
+        scaled_array = self.scalar.transform(np_array)
+
+        # 再びtorch.Tensorに戻して返す
+        return torch.tensor(scaled_array, device=t.device, dtype=t.dtype)
 
     def do(
         self,
@@ -76,10 +80,10 @@ class NutrientStandardPreprocess():
         test = _rn.loc[_rn.index.isin(test_recipe_ids)]
         val = _rn.loc[_rn.index.isin(val_recipe_ids)]
 
-        self.scalar.fit(train[self.use_nutrients])
-        train = self.scalar.transform(train[self.use_nutrients])
-        test = self.scalar.transform(test[self.use_nutrients])
-        val = self.scalar.transform(val[self.use_nutrients])
+        self.fit(train[self.use_nutrients])
+        train = self.transform(train[self.use_nutrients])
+        test = self.transform(test[self.use_nutrients])
+        val = self.transform(val[self.use_nutrients])
 
         _rn.loc[train_recipe_ids, self.use_nutrients] = train
         _rn.loc[test_recipe_ids, self.use_nutrients] = test
