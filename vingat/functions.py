@@ -259,7 +259,7 @@ def train_one_epoch(
             print("pos nan: ", pos_nan_count, "/", pos_count)
             print("neg nan: ", neg_nan_count, "/", neg_count)
 
-        if counter % 3 == 0:
+        if counter % 1 == 0:
             all_scores = torch.cat([pos_scores, neg_scores])
             all_targets = torch.cat([
                 torch.ones_like(pos_scores),
