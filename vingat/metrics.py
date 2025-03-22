@@ -167,7 +167,7 @@ class FastNDCG(nn.Module):
             pos = counts_per_user[u]
             pred_padded[u, pos] = predictions[i]
             target_padded[u, pos] = targets[i]
-            counts_per_user[u] = 1
+            counts_per_user[u] += 1
 
         _, topk_indices = torch.topk(pred_padded, k=self.k, dim=1)
         topk_targets = torch.gather(target_padded, 1, topk_indices)
