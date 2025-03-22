@@ -155,48 +155,27 @@ class FastNDCG(nn.Module):
 
     def forward(self, predictions, targets, indexes):
         device = predictions.device
-        k = self.k
-
-        if predictions.numel() == 0:
-            return torch.tensor(0.0, device=device)
-
-        # 各ユーザーに連番IDを振る
         unique_users, inverse_indices = torch.unique(indexes, return_inverse=True)
         num_users = unique_users.size(0)
+        max_items = torch.bincount(inverse_indices).max().item()
 
-        # ユーザーごとに属するアイテム数を取得
-        counts = torch.bincount(inverse_indices, minlength=num_users)
-        max_items = counts.max().item()
-        k = min(k, max_items)
-
-        # パディングされたバッチを作成（空きには -1 を入れる）
         pred_padded = torch.full((num_users, max_items), -1e9, device=device)
         target_padded = torch.zeros((num_users, max_items), device=device)
-
-        # arange = torch.arange(predictions.size(0), device=device)
-        # positions = torch.zeros_like(arange)
-
-        # 各ユーザー内でのアイテム順序を取得
         counts_per_user = torch.zeros(num_users, dtype=torch.long, device=device)
         for i in range(predictions.size(0)):
-            user_idx = inverse_indices[i]
-            pos = counts_per_user[user_idx]
-            pred_padded[user_idx, pos] = predictions[i]
-            target_padded[user_idx, pos] = targets[i]
-            counts_per_user[user_idx] += 1
+            u = inverse_indices[i]
+            pos = counts_per_user[u]
+            pred_padded[u, pos] = predictions[i]
+            target_padded[u, pos] = targets[i]
+            counts_per_user[u] = 1
 
-        # top-k を取得（各ユーザーの最大アイテム数に依存）
-        topk_preds, topk_indices = torch.topk(pred_padded, k=k, dim=1)
+        _, topk_indices = torch.topk(pred_padded, k=self.k, dim=1)
         topk_targets = torch.gather(target_padded, 1, topk_indices)
 
-        discounts = torch.log2(torch.arange(2, k + 2, device=device)).unsqueeze(0)  # shape: (1, k)
-
+        discounts = torch.log2(torch.arange(2, self.k + 2, device=device))
         dcg = (topk_targets / discounts).sum(dim=1)
 
-        # IDCG: ターゲットだけソートして理想順にする
         ideal_targets, _ = torch.sort(target_padded, descending=True, dim=1)
-        ideal_targets_k = ideal_targets[:, :k]
-        idcg = (ideal_targets_k / discounts).sum(dim=1)
+        idcg = (ideal_targets[:, :self.k] / discounts).sum(dim=1)
 
-        ndcg = torch.where(idcg > 0, dcg / idcg, torch.zeros_like(dcg))
-        return ndcg.mean()
+        return (dcg / idcg).mean()
