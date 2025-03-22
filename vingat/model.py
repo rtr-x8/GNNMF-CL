@@ -143,7 +143,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             for cid in unique_ids
             if (cluster_ids == cid).sum() > 0
         ], dim=0)  # (num_clusters_in_batch, output_dim)
-        print(cluster_means.size(0), cluster_means.shape, unique_ids)
+
         if cluster_means.size(0) > 1:
             dist_matrix = torch.cdist(cluster_means, cluster_means, p=2)
             inter_loss = F.relu(
