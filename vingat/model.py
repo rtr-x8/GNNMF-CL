@@ -118,14 +118,13 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         )
 
         # 2) クラスタロス計算
-        """
         cluster_ids = data["intention"].cluster  # shape: (B,)
 
         # =============== (A) クラスタ内損失 ================
         #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
         cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
         with torch.no_grad():
-            cluster_centers_emb = self.nutrient_encoder(cluster_centers_for_samples)
+            cluster_centers_emb = self.nutrient_encoder(cluster_centers_for_samples.detach())
         intra_loss = F.mse_loss(
             caption_emb,
             cluster_centers_emb,
@@ -136,6 +135,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
 
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
+        
         cluster_ids = data["intention"].cluster  # (B,)
         unique_ids = torch.unique(cluster_ids)
         cluster_means = torch.stack([
@@ -154,7 +154,6 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             name="cl_inter_loss", loss=inter_loss, weight=self.cluster_inner_weight
         )
 
-        """
         # 4) 正規化した埋め込みを返す
         caption_emb_norm = F.normalize(caption_emb, p=2, dim=1)
         nutrient_emb_norm = F.normalize(nutrient_emb, p=2, dim=1)
@@ -163,9 +162,8 @@ class NutrientCaptionContrastiveLearning(nn.Module):
             caption_emb_norm,
             nutrient_emb_norm,
             contrastive_loss_item,
-            contrastive_loss_item,
-            contrastive_loss_item,
-            #cluster_loss_item
+            inter_loss_item,
+            cluster_loss_item
         )
 
 
