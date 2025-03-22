@@ -7,3 +7,4 @@ notebook/*
 !notebook/.env.sample
 *.pth
 *.joblib
+diff.txt

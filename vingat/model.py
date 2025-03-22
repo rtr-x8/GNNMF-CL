@@ -135,7 +135,7 @@ class NutrientCaptionContrastiveLearning(nn.Module):
 
         # =============== (B) クラスタ間損失 ================
         #  クラスタ間の中心がマージンより小さければペナルティ（離す）
-        
+
         cluster_ids = data["intention"].cluster  # (B,)
         unique_ids = torch.unique(cluster_ids)
         cluster_means = torch.stack([
