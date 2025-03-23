@@ -35,7 +35,7 @@ class ContrastiveLoss(nn.Module):
         z = F.normalize(z, dim=-1)  # 正規化（余分な計算削減）
 
         # バッチ処理の導入
-        batch_size = 512  # バッチサイズを設定
+        batch_size = 1024  # バッチサイズを設定
         losses = []
         for start in range(0, 2 * N, batch_size):
             end = min(start + batch_size, 2 * N)
