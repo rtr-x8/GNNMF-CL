@@ -154,28 +154,46 @@ class FastNDCG(nn.Module):
         self.k = top_k
 
     def forward(self, predictions, targets, indexes):
+        """
+        入力テンソルは、ユーザーあたり最低でも10件以上ある前提。
+        加えてNDCG@10のみを評価に用いるため、
+        ユーザーごとに最大10件分のスコア・ターゲットのみをパディングして計算。
+        """
         device = predictions.device
         unique_users, inverse_indices = torch.unique(indexes, return_inverse=True)
         num_users = unique_users.size(0)
-        max_items = torch.bincount(inverse_indices).max().item()
 
+        # 最大アイテム数を 10 に固定
+        max_items = 10
+
+        # パディング用テンソル（ユーザー数 x 10固定）
         pred_padded = torch.full((num_users, max_items), -1e9, device=device)
         target_padded = torch.zeros((num_users, max_items), device=device)
+
+        # 各ユーザーが現在何件詰めたかをカウント
         counts_per_user = torch.zeros(num_users, dtype=torch.long, device=device)
+
+        # predictions.size(0) 個の (score, target) を順番にユーザー毎に詰める
         for i in range(predictions.size(0)):
             u = inverse_indices[i]
             pos = counts_per_user[u]
-            pred_padded[u, pos] = predictions[i]
-            target_padded[u, pos] = targets[i]
-            counts_per_user[u] += 1
+            # すでに10件埋めていたら無視（NDCG@10なので超過分は使わない）
+            if pos < max_items:
+                pred_padded[u, pos] = predictions[i]
+                target_padded[u, pos] = targets[i]
+                counts_per_user[u] += 1
 
+        # 上位k=10を取る（max_items=10 なのでここでは 10 件そのままでもOK）
         _, topk_indices = torch.topk(pred_padded, k=self.k, dim=1)
         topk_targets = torch.gather(target_padded, 1, topk_indices)
 
+        # DCG 計算
         discounts = torch.log2(torch.arange(2, self.k + 2, device=device))
         dcg = (topk_targets / discounts).sum(dim=1)
 
+        # IDCG 計算（理想順序にソート）
         ideal_targets, _ = torch.sort(target_padded, descending=True, dim=1)
         idcg = (ideal_targets[:, :self.k] / discounts).sum(dim=1)
 
+        # NDCG@k の平均
         return (dcg / idcg).mean()
