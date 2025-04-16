@@ -120,30 +120,16 @@ class NutrientCaptionContrastiveLearning(nn.Module):
         # 2) クラスタロス計算
         cluster_ids = data["intention"].cluster  # shape: (B,)
 
-        # =============== (A) クラスタ内損失 (変更後) ================
-        cluster_ids = data["intention"].cluster  # (B,)
-        unique_ids = torch.unique(cluster_ids)
-
-        intra_losses = []
-        for cid in unique_ids:
-            c_emb = caption_emb[cluster_ids == cid]  # (n_c, output_dim)
-            if c_emb.size(0) < 2:
-                # サンプルが1つ以下ならスキップ
-                continue
-
-            # バッチ内クラスタ cid の平均ベクトル
-            mean_emb = c_emb.mean(dim=0, keepdim=True)  # (1, output_dim)
-
-            # MSE ロスなどで「クラスタ平均からの距離」を減らす
-            c_intra_loss = F.mse_loss(c_emb, mean_emb.expand_as(c_emb))
-            intra_losses.append(c_intra_loss)
-
-        # バッチ内に複数クラスタが存在する場合、各クラスタの損失平均
-        if len(intra_losses) > 0:
-            intra_loss = torch.stack(intra_losses).mean()
-        else:
-            # バッチに1種類のクラスタしか無い、あるいは何もなければ0
-            intra_loss = torch.tensor(0.0, device=caption_emb.device)
+        # =============== (A) クラスタ内損失 ================
+        #  それぞれの栄養素埋め込みが属するクラスタ中心に近づく (L2損失)
+        cluster_centers_for_samples = self.cluster_centers[cluster_ids]  # (B, output_dim)
+        with torch.no_grad():
+            cluster_centers_emb = self.nutrient_encoder(cluster_centers_for_samples.detach())
+        intra_loss = F.mse_loss(
+            caption_emb,
+            cluster_centers_emb,
+            reduction='mean'
+        )
 
         cluster_loss_item = LossItem(name="cl_intra_loss", loss=intra_loss,
                                      weight=self.cluster_weight)
