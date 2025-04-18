@@ -18,7 +18,6 @@ def create_dataloader(
     shuffle=True,
     neg_sampling_ratio=1.0,
     num_workers=0,
-    is_abration_cl=False,
     popularity=None,
 ):
     sampler = None
@@ -33,9 +32,6 @@ def create_dataloader(
         ('item', 'has_intention', 'intention'): [20, 10],
         ('item', 'has_taste', 'taste'): [20, 10],
     }
-    if is_abration_cl:
-        del neibors[('intention', 'associated_with', 'item')]
-        del neibors[('item', 'has_intention', 'intention')]
     if popularity is not None:
         sampler = NegativeSampling(
             mode="binary",
@@ -248,42 +244,18 @@ def mask_hetero(
 
 def make_abration_dataloader_wo_cl(
     data: HeteroData,
-    batch_size,
-    shuffle=True,
-    neg_sampling_ratio=1.0,
-    num_workers=0,
-    popularity=None,
 ):
     _data = data.clone()
     del _data["intention"]
     del _data["intention", "associated_with", "item"]
     del _data["item", "has_intention", "intention"]
-    return _data, create_dataloader(
-        _data,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        neg_sampling_ratio=neg_sampling_ratio,
-        num_workers=num_workers,
-        is_abration_cl=True,
-        popularity=popularity)
+    return _data
 
 
 def make_abration_dataloader_wo_cd(
     data: HeteroData,
-    batch_size,
-    shuffle=True,
-    neg_sampling_ratio=1.0,
-    num_workers=0,
-    popularity=None,
 ) -> Tuple[HeteroData, LinkNeighborLoader]:
     _data = data.clone()
     _data["taste"].x = torch.rand_like(_data["taste"].x, dtype=torch.float32)
     del _data["taste"].org
-    return _data, create_dataloader(
-        _data,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        neg_sampling_ratio=neg_sampling_ratio,
-        num_workers=num_workers,
-        is_abration_cl=False,
-        popularity=popularity)
+    return _data

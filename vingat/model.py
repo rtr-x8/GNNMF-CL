@@ -346,6 +346,7 @@ class DictLayerNormForLayer(nn.Module):  # noqa F811 下の方で使ってるが
 
     def main_forward(self, x_dict):
         return {
+
             node_type: self.main_rescaling[node_type](x)
             for node_type, x in x_dict.items()
         }
@@ -486,9 +487,7 @@ class RecommendationModel(nn.Module):
         )
 
         # Layer Normalization
-        ln_node_types = ["user", "item", "image", "ingredient", "taste"]
-        if not is_abration_wo_cl:
-            ln_node_types.append("intention")
+        ln_node_types = ["user", "item", "image", "ingredient", "taste", "intention"]
         self.layer_norm = DictLayerNormForLayer(
             node_types=ln_node_types,
             hidden_dim=hidden_dim
