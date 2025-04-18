@@ -18,7 +18,6 @@ def create_dataloader(
     shuffle=True,
     neg_sampling_ratio=1.0,
     num_workers=0,
-    is_abration_cl=False,
     popularity=None,
 ):
     sampler = None
@@ -33,9 +32,6 @@ def create_dataloader(
         ('item', 'has_intention', 'intention'): [20, 10],
         ('item', 'has_taste', 'taste'): [20, 10],
     }
-    if is_abration_cl:
-        del neibors[('intention', 'associated_with', 'item')]
-        del neibors[('item', 'has_intention', 'intention')]
     if popularity is not None:
         sampler = NegativeSampling(
             mode="binary",
